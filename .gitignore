@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+
+# uv
+uv.lock
+
+# Environment
+.env
+
+# Database
+data/*.db
+data/*.sqlite3
+
+# Logs
+logs/*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# User plugins (third-party)
+user_plugins/*/
+!user_plugins/.gitkeep
+
+# Frontend build output
+frontend/dist/
+frontend/node_modules/
+
+# Docker
+.docker/
