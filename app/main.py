@@ -5,28 +5,35 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.core.plugin_loader import PluginLoader
-from app.database import init_db
-from app.routers.plugins import router as plugins_router
+from app.core.vault import Vault
+from app.database import get_session_factory, init_db
+from app.routers import auth as auth_router
+from app.routers import plugins as plugins_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理：启动时初始化 DB + 加载插件."""
+    """应用生命周期管理：启动时初始化 DB + 加载插件 + 创建 Vault."""
     settings = get_settings()
 
     # 初始化数据库表
     await init_db()
+
+    # 创建凭据保险库
+    session_factory = get_session_factory()
+    vault = Vault(session_factory)
 
     # 加载插件
     loader = PluginLoader()
     plugin_registry = loader.load_all()
 
     # 注入到 app.state
+    app.state.vault = vault
     app.state.plugin_registry = plugin_registry
     app.state.is_unlocked = False
 
@@ -34,6 +41,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # 关闭时清理
+    vault.lock()
     print("GameSignHub 正在关闭...")
 
 
@@ -43,7 +51,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="GameSignHub",
         description="多游戏社区签到可视化管理工具",
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
     )
 
@@ -57,21 +65,13 @@ def create_app() -> FastAPI:
     )
 
     # 注册路由
-    app.include_router(plugins_router)
+    app.include_router(auth_router.router)
+    app.include_router(plugins_router.router)
 
     # 根路径
     @app.get("/")
     async def root():
-        return {"name": "GameSignHub", "version": "0.1.0", "status": "running"}
-
-    # 健康检查
-    @app.get("/api/status")
-    async def status(request: Request):
-        return {
-            "status": "running",
-            "is_unlocked": request.app.state.is_unlocked,
-            "plugins_loaded": len(request.app.state.plugin_registry),
-        }
+        return {"name": "GameSignHub", "version": "0.2.0", "status": "running"}
 
     return app
 
