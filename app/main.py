@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
 
     # 首次启动自动设置默认密码 12345678
     if await vault.ensure_default_password():
-        print("首次启动，已设置默认密码: 12345678")
+        print("首次启动，已设置默认密码: abcdefgh")
 
     # 加载插件
     loader = PluginLoader()

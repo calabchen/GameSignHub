@@ -9,7 +9,6 @@ import random
 
 from app.core.plugin_base import BaseGamePlugin, GameInfo, PluginInfo, SignInResult
 from plugins.kuro_plugin.client import KuroHttpClient
-from plugins.kuro_plugin.forum import KuroForumTasks
 from plugins.kuro_plugin.games.base import PGRGame, WuwaGame
 from plugins.kuro_plugin.models import KuroCredentials
 
@@ -52,10 +51,14 @@ class KuroPlugin(BaseGamePlugin):
         cred = KuroCredentials.from_dict(credentials.get("credentials", credentials))
         client = KuroHttpClient(cred)
 
-        try:
-            user_id = await client.get_user_id()
-        except Exception as e:
-            return [SignInResult(game_id, "failed", "", f"获取userId失败: {e}")]
+        # 获取 userId（优先用已提供的，否则从 API 获取）
+        if cred.user_id:
+            user_id = cred.user_id
+        else:
+            try:
+                user_id = await client.get_user_id()
+            except Exception as e:
+                return [SignInResult(game_id, "failed", "", f"获取userId失败: {e}")]
 
         if game_id == "wuwa":
             game = WuwaGame(client)
@@ -66,7 +69,18 @@ class KuroPlugin(BaseGamePlugin):
         else:
             return [SignInResult(game_id, "failed", "", f"未知游戏: {game_id}")]
 
-        # 获取角色列表
+        # 鸣潮优先用已提供的 roleId
+        role_id = cred.get_role_id(game_id)
+        if role_id:
+            r = await game.sign_in(role_id=role_id, user_id=user_id)
+            return [SignInResult(
+                game_id=game_id,
+                status=r["status"],
+                reward=r["reward"],
+                message=r["message"],
+            )]
+
+        # 从 API 获取角色列表
         try:
             roles = await client.get_game_role(game_type_id)
         except Exception:
@@ -95,25 +109,12 @@ class KuroPlugin(BaseGamePlugin):
         return results
 
     async def sign_in_all(self, credentials: dict) -> dict[str, list[SignInResult]]:
-        """所有游戏签到 + 论坛任务."""
-        cred = KuroCredentials.from_dict(credentials.get("credentials", credentials))
-        client = KuroHttpClient(cred)
-
+        """所有游戏签到."""
         all_results: dict[str, list[SignInResult]] = {}
 
-        # 游戏签到
         for game_id in ("wuwa", "pgr"):
             if self._is_game_enabled(credentials, game_id):
                 all_results[game_id] = await self.sign_in(credentials, game_id)
-
-        # 论坛任务
-        if credentials.get("enable_forum", True):
-            forum = KuroForumTasks(client)
-            forum_results = await forum.execute_all()
-            all_results["forum"] = [
-                SignInResult("forum", r["status"], "", f"{r['task']}: {r['message']}")
-                for r in forum_results
-            ]
 
         return all_results
 

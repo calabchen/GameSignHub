@@ -7,7 +7,7 @@
 """
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -59,7 +59,7 @@ class Orchestrator:
             results = await plugin.sign_in_all(cred)
 
             # 写入日志
-            now = datetime.now(UTC)
+            now = datetime.now()
             for game_id, sign_results in results.items():
                 for r in sign_results:
                     log = SignLog(
@@ -166,7 +166,7 @@ class Orchestrator:
 
     async def get_today_summary(self) -> dict:
         """今日签到汇总."""
-        today = datetime.now(UTC).strftime("%Y-%m-%d")
+        today = datetime.now().strftime("%Y-%m-%d")
         async with self._session_factory() as session:
             stmt = select(SignLog).where(SignLog.signed_at >= today)
             r = await session.execute(stmt)
@@ -181,6 +181,14 @@ class Orchestrator:
             else:
                 summary["failed"] += 1
         return summary
+
+    async def clear_logs(self) -> int:
+        """清除所有签到日志，返回删除数量."""
+        from sqlalchemy import delete
+        async with self._session_factory() as session:
+            result = await session.execute(delete(SignLog))
+            await session.commit()
+            return result.rowcount
 
     def _ensure_unlocked(self) -> None:
         if not self._vault.is_unlocked:

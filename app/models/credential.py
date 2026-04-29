@@ -1,7 +1,7 @@
 """加密凭据存储模型."""
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Integer, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -22,12 +22,12 @@ class Credential(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC)
+        DateTime, default=datetime.now
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        default=datetime.now,
+        onupdate=datetime.now,
     )
 
     @property

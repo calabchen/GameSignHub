@@ -89,10 +89,10 @@ class Vault:
         return not await self._is_first_time()
 
     async def ensure_default_password(self) -> bool:
-        """首次启动时设置默认密码 12345678."""
+        """首次启动时设置默认密码 abcdefgh."""
         if await self._is_first_time():
-            await self._initialize("12345678")
-            logger.info("已设置默认密码 12345678")
+            await self._initialize("abcdefgh")
+            logger.info("已设置默认密码 abcdefgh")
             return True
         return False
 
@@ -209,7 +209,17 @@ class Vault:
         # 更新内存缓存
         credential_data["id"] = new_id
         credential_data["plugin_id"] = plugin_id
-        self._cache.setdefault(plugin_id, []).append(credential_data)
+
+        if cred_id:
+            # 更新：替换缓存中已有的条目
+            cached = self._cache.get(plugin_id, [])
+            for i, c in enumerate(cached):
+                if c["id"] == cred_id:
+                    cached[i] = credential_data
+                    break
+        else:
+            # 新增：追加到缓存
+            self._cache.setdefault(plugin_id, []).append(credential_data)
 
         return new_id
 

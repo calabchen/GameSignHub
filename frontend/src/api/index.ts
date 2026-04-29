@@ -65,3 +65,8 @@ export async function fetchTodaySummary() {
   const res = await api.get('/api/logs/today')
   return res.data
 }
+
+export async function clearLogs() {
+  const res = await api.delete('/api/logs')
+  return res.data
+}

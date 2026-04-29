@@ -3,10 +3,11 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   fetchPlugins, fetchCredentials,
-  createCredential, updateCredential, deleteCredential, validateCredential
+  createCredential, updateCredential, deleteCredential, validateCredential,
+  signCredential, signAll,
 } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, VideoPlay } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const plugins = ref<any[]>([])
@@ -23,6 +24,33 @@ const form = reactive({
   enabled_games: [] as string[],
   is_enabled: true,
 })
+
+const signLoading = ref<number | null>(null)
+const signAllLoading = ref(false)
+
+async function handleSign(credId: number) {
+  signLoading.value = credId
+  try {
+    await signCredential(credId)
+    ElMessage.success('签到完成')
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.detail || '签到失败')
+  } finally {
+    signLoading.value = null
+  }
+}
+
+async function handleSignAll() {
+  signAllLoading.value = true
+  try {
+    await signAll()
+    ElMessage.success('全部签到完成')
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.detail || '签到失败')
+  } finally {
+    signAllLoading.value = false
+  }
+}
 
 onMounted(async () => {
   try { plugins.value = await fetchPlugins() } catch {}
@@ -124,7 +152,12 @@ async function handleValidate(cred: any) {
         </el-select>
         <span style="color:#909399;font-size:13px">{{ filteredCredentials().length }} 个凭据</span>
       </div>
-      <el-button type="primary" :icon="Plus" @click="openAdd">添加凭据</el-button>
+      <div style="display:flex;gap:8px">
+        <el-button type="primary" :icon="VideoPlay" :loading="signAllLoading" @click="handleSignAll" :disabled="filteredCredentials().length === 0">
+          全部签到
+        </el-button>
+        <el-button type="primary" :icon="Plus" @click="openAdd">添加凭据</el-button>
+      </div>
     </div>
 
     <el-table :data="filteredCredentials()" stripe empty-text="暂无数据">
@@ -147,8 +180,9 @@ async function handleValidate(cred: any) {
           <el-switch :model-value="row.is_enabled" size="small" disabled />
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="240" fixed="right">
+      <el-table-column label="操作" width="290" fixed="right">
         <template #default="{ row }">
+          <el-button size="small" type="primary" :loading="signLoading === row.id" @click="handleSign(row.id)">签到</el-button>
           <el-button size="small" @click="handleValidate(row)">验证</el-button>
           <el-button size="small" @click="openEdit(row)">编辑</el-button>
           <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>

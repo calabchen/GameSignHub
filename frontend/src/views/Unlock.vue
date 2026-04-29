@@ -73,7 +73,7 @@ async function handleUnlock() {
       </el-button>
 
       <p style="text-align:center;margin-top:20px;color:#c0c4cc;font-size:12px">
-        默认密码: 12345678 &nbsp;|&nbsp; 本地服务 · 127.0.0.1:18000
+        默认密码: abcdefgh &nbsp;|&nbsp; 本地服务 · 127.0.0.1:18000
       </p>
     </el-card>
   </div>

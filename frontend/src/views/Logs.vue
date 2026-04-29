@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
-import { fetchLogs, fetchTodaySummary } from '@/api'
+import { fetchLogs, fetchTodaySummary, clearLogs, fetchPlugins } from '@/api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete } from '@element-plus/icons-vue'
 
 const logs = ref<any[]>([])
 const total = ref(0)
@@ -29,7 +31,7 @@ async function refresh() {
     logs.value = logsRes.items
     total.value = logsRes.total
     today.value = todayRes
-    try { plugins.value = await (await import('@/api')).fetchPlugins() } catch {}
+    try { plugins.value = await fetchPlugins() } catch {}
   } catch {}
 }
 
@@ -42,6 +44,15 @@ function statusTag(s: string) {
   if (s === 'already') return 'info'
   if (s === 'failed') return 'danger'
   return ''
+}
+
+async function handleClear() {
+  try {
+    await ElMessageBox.confirm('确定清除所有签到日志？此操作不可恢复。', '确认', { type: 'warning' })
+    const res = await clearLogs()
+    ElMessage.success(res.message)
+    await refresh()
+  } catch {}
 }
 </script>
 
@@ -63,6 +74,7 @@ function statusTag(s: string) {
           <el-option label="全部" value="" />
           <el-option v-for="p in plugins" :key="p.id" :label="p.name" :value="p.id" />
         </el-select>
+        <el-button size="small" type="danger" :icon="Delete" @click="handleClear">清除</el-button>
       </div>
     </div>
 

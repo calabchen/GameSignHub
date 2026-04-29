@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchPlugins, fetchCredentials, signAll } from '@/api'
-import { ElMessage } from 'element-plus'
-import { VideoPlay } from '@element-plus/icons-vue'
+import { fetchPlugins, fetchCredentials } from '@/api'
 
 const router = useRouter()
 const plugins = ref<any[]>([])
 const credentials = ref<any[]>([])
-const signAllLoading = ref(false)
 
 onMounted(async () => {
   try { plugins.value = await fetchPlugins() } catch {}
@@ -22,18 +19,6 @@ function credCount(pluginId: string) {
 function goToCredentials(pluginId: string) {
   router.push({ name: 'credentials', query: { plugin: pluginId } })
 }
-
-async function handleSignAll() {
-  signAllLoading.value = true
-  try {
-    await signAll()
-    ElMessage.success('全部签到完成')
-  } catch (e: any) {
-    ElMessage.error(e.response?.data?.detail || '签到失败')
-  } finally {
-    signAllLoading.value = false
-  }
-}
 </script>
 
 <template>
@@ -42,13 +27,6 @@ async function handleSignAll() {
       <div>
         <h2 style="margin:0;font-size:20px">控制面板</h2>
         <p style="margin:4px 0 0;color:#909399;font-size:13px">{{ plugins.length }} 个游戏社区</p>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <el-tag v-if="credentials.length" type="info" effect="plain">{{ credentials.length }} 个凭据</el-tag>
-        <el-button type="primary" :icon="VideoPlay" :loading="signAllLoading" @click="handleSignAll"
-          :disabled="credentials.length === 0">
-          全部签到
-        </el-button>
       </div>
     </div>
 

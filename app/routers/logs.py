@@ -54,3 +54,11 @@ async def today_summary(request: Request):
     oc: Orchestrator = request.app.state.orchestrator
     data = await oc.get_today_summary()
     return TodaySummary(**data)
+
+
+@router.delete("")
+async def clear_logs(request: Request):
+    """清除所有签到日志."""
+    oc: Orchestrator = request.app.state.orchestrator
+    count = await oc.clear_logs()
+    return {"message": f"已清除 {count} 条日志"}

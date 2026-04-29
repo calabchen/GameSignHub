@@ -1,6 +1,6 @@
 """签到日志模型."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import DateTime, Integer, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -21,8 +21,8 @@ class SignLog(Base):
     message: Mapped[str] = mapped_column(Text, default="")
     raw_response: Mapped[str] = mapped_column(Text, default="")
     signed_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC)
+        DateTime, default=datetime.now
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC)
+        DateTime, default=datetime.now
     )

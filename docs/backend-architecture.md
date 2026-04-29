@@ -18,7 +18,92 @@
 
 ---
 
-## 二、目录结构
+## 二、当前实现状态
+
+> **新人请优先阅读本章**，避免将规划当作已完成功能。
+
+### 2.1 实现进度总览
+
+| 模块 | 状态 | 说明 |
+|------|------|------|
+| 核心骨架 (FastAPI + SQLAlchemy) | ✅ 完成 | main.py / config.py / database.py |
+| 认证系统 (bcrypt + Argon2id + JWT) | ✅ 完成 | POST /api/unlock, /lock, /status, /password |
+| 凭据保险库 (AES-256-GCM) | ✅ 完成 | Vault 增删改查 + 内存密钥管理 |
+| 插件系统 (BaseGamePlugin + Loader) | ✅ 完成 | 插件发现/加载/注册 |
+| 签到编排器 (Orchestrator) | ✅ 完成 | 单用户/全插件/全部签到 |
+| 定时调度器 (APScheduler) | ✅ 完成 | cron 持久化 + GET/PUT /api/schedule |
+| 签到日志 | ✅ 完成 | 分页查询 + 今日汇总 + 清空 |
+| 凭据管理 (CRUD) | ✅ 完成 | 新增/编辑/删除/验证 |
+| **库街区插件 (kuro_plugin)** | ✅ 完成 | 鸣潮 + 战双帕弥什 签到可用 |
+| **米游社插件 (mhy_plugin)** | ❌ 空壳 | 仅注册 6 个游戏元信息，所有签到方法 `raise NotImplementedError` |
+| 推送模块 (Push) | ❌ 未开始 | 17+ 渠道全部未实现，无 `push.py` |
+| WebSocket 日志广播 | ❌ 未开始 | 无 `ws_logger.py` |
+| Docker 部署 | ❌ 未开始 | 无 Dockerfile / docker-compose.yml |
+| README.md | ❌ 不存在 | 无项目说明文档 |
+| 前端 Settings 页面 | ❌ 未开始 | 无 `Settings.vue` |
+| 凭据排序 (reorder) | ❌ 未开始 | 无 `PATCH /api/credentials/{id}/reorder` |
+
+### 2.2 插件完成度
+
+| 插件 | 版本 | 状态 | 签到 | 论坛任务 | 支持游戏 |
+|------|------|------|------|----------|----------|
+| kuro_plugin (库街区) | 0.1.0 | **可用** | 鸣潮、战双帕弥什 | ❌ 未实现 | 2 |
+| mhy_plugin (米游社) | 0.1.0 | **空壳** | 全部 NotImplementedError | ❌ 未实现 | 6（全部不可用） |
+| user_plugins | — | 空目录 | — | — | 0 |
+
+### 2.3 API 实现对照
+
+已实现 vs 文档中规划的差异：
+
+| 文档规划 | 实际实现 | 差异说明 |
+|----------|----------|----------|
+| `POST /api/sign/{plugin_id}/{game_id}` | 不存在 | 未实现按游戏维度的签到 |
+| `POST /api/sign/credential/{cred_id}` | 已实现 | 实际有此端点，文档未列出 |
+| `PATCH /api/credentials/{id}/reorder` | 不存在 | 排序功能未实现 |
+| `GET /api/push-config` | 不存在 | 推送模块未开始 |
+| `PUT /api/push-config` | 不存在 | 推送模块未开始 |
+| `PUT /api/unlock/password` | 已实现 | 修改密码功能，文档未列出 |
+| `DELETE /api/logs` | 已实现 | 清空日志，文档未列出 |
+
+### 2.4 文档目录 vs 实际文件
+
+以下在架构文档目录树中列出但实际不存在的文件/目录：
+
+| 文档列出 | 实际情况 |
+|----------|----------|
+| `Dockerfile`、`docker-compose.yml` | 不存在 |
+| `README.md` | 不存在 |
+| `app/core/push.py` | 推送模块未开始 |
+| `app/routers/push_config.py` | 推送模块未开始 |
+| `app/utils/ws_logger.py` | WebSocket 未实现 |
+| `app/schemas/plugin.py` | 不存在（未使用独立 Schema） |
+| `plugins/kuro_plugin/forum.py` | 论坛任务未实现 |
+| `plugins/kuro_plugin/games/wuwa.py` | WuwaGame 实际在 `base.py` 中 |
+| `plugins/kuro_plugin/games/pgr.py` | PGRGame 实际在 `base.py` 中 |
+| `plugins/mhy_plugin/client.py` | mhy_plugin 为空壳 |
+| `plugins/mhy_plugin/bbs.py` | 不存在 |
+| `plugins/mhy_plugin/captcha.py` | 不存在 |
+| `plugins/mhy_plugin/models.py` | 不存在 |
+| `plugins/mhy_plugin/pyproject.toml` | 不存在 |
+| `plugins/mhy_plugin/games/genshin.py` 等 | 仅 `games/__init__.py` 空文件 |
+| `frontend/src/views/Settings.vue` | 不存在 |
+| `frontend/src/components/` | 目录不存在 |
+| `logs/` | 目录不存在 |
+
+### 2.5 推荐后续开发顺序
+
+基于当前完成度：
+
+1. **高优先** — mhy_plugin 签到实现（6 款米哈游游戏，用户量最大）
+2. **高优先** — 前端 Settings.vue（API 已就绪，仅缺前端页面）
+3. **中优先** — Docker 部署（Dockerfile + docker-compose.yml）
+4. **中优先** — 推送模块 (push.py，17+ 渠道)
+5. **低优先** — WebSocket 日志广播
+6. **低优先** — 凭据排序、论坛任务
+
+---
+
+## 三、目录结构
 
 ```
 GameSignHub/
@@ -131,7 +216,7 @@ GameSignHub/
 
 ---
 
-## 三、核心技术栈
+## 四、核心技术栈
 
 | 层级 | 技术 | 版本 | 用途 |
 |------|------|------|------|
@@ -151,9 +236,9 @@ GameSignHub/
 
 ---
 
-## 四、核心架构设计
+## 五、核心架构设计
 
-### 4.1 整体架构图
+### 5.1 整体架构图
 
 ```
 ┌────────────────────────────────────────────────────────────┐
@@ -196,7 +281,7 @@ GameSignHub/
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 模块职责
+### 5.2 模块职责
 
 | 模块 | 职责 |
 |------|------|
@@ -208,7 +293,7 @@ GameSignHub/
 | **Scheduler** | APScheduler 封装：cron 表达式管理、持久化、手动触发 |
 | **Push** | 消息推送：支持多种渠道 (Telegram、ServerChan、PushPlus 等) |
 
-### 4.3 插件系统设计
+### 5.3 插件系统设计
 
 #### BaseGamePlugin 接口
 
@@ -272,9 +357,9 @@ class BaseGamePlugin(ABC):
 
 ---
 
-## 五、数据库设计
+## 六、数据库设计
 
-### 5.1 credentials（加密凭据表）
+### 6.1 credentials（加密凭据表）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -288,7 +373,7 @@ class BaseGamePlugin(ABC):
 | created_at | DATETIME | 创建时间 |
 | updated_at | DATETIME | 更新时间 |
 
-### 5.2 sign_logs（签到日志表）
+### 6.2 sign_logs（签到日志表）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -304,7 +389,7 @@ class BaseGamePlugin(ABC):
 | signed_at | DATETIME | 签到日期（按游戏时区） |
 | created_at | DATETIME | 记录创建时间 |
 
-### 5.3 configs（配置表，key-value）
+### 6.3 configs（配置表，key-value）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -323,9 +408,9 @@ class BaseGamePlugin(ABC):
 
 ---
 
-## 六、API 路由设计
+## 七、API 路由设计
 
-### 6.1 认证
+### 7.1 认证
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -333,14 +418,14 @@ class BaseGamePlugin(ABC):
 | POST | /api/lock | 锁定（销毁内存密钥） |
 | GET | /api/status | 当前锁定状态 |
 
-### 6.2 插件
+### 7.2 插件
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | /api/plugins | 已加载的插件列表 |
 | GET | /api/plugins/{id} | 单个插件详情 |
 
-### 6.3 凭据管理
+### 7.3 凭据管理
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -351,7 +436,7 @@ class BaseGamePlugin(ABC):
 | POST | /api/credentials/{id}/validate | 验证凭据是否有效 |
 | PATCH | /api/credentials/{id}/reorder | 排序 |
 
-### 6.4 签到
+### 7.4 签到
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -361,14 +446,14 @@ class BaseGamePlugin(ABC):
 | POST | /api/sign/credential/{cred_id} | 指定用户全部 |
 | GET | /api/sign/status | 当前签到任务进度 |
 
-### 6.5 日志
+### 7.5 日志
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | /api/logs | 日志查询（分页+筛选） |
 | GET | /api/logs/today | 今日签到汇总 |
 
-### 6.6 配置
+### 7.6 配置
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -380,9 +465,9 @@ class BaseGamePlugin(ABC):
 
 ---
 
-## 七、安全设计
+## 八、安全设计
 
-### 7.1 密码认证 + 密钥派生
+### 8.1 密码认证 + 密钥派生
 
 ```
 用户设置密码
@@ -400,7 +485,7 @@ Argon2id(password+salt)  → 256-bit 密钥 (用于加密)
 - 使用 **Argon2id** (time_cost=3, mem_cost=64MB, parallelism=4) 派生加密密钥
 - 派生密钥仅存于内存，退出/锁定时销毁
 
-### 7.2 凭据加密存储
+### 8.2 凭据加密存储
 
 ```
 明文凭据 JSON
@@ -419,13 +504,13 @@ AES-256-GCM 加密
 - 每次加密生成随机 nonce，相同凭据每次密文不同
 - 附加数据 (AAD) 绑定 credential_id，防止密文被替换
 
-### 7.3 会话安全
+### 8.3 会话安全
 
 - JWT 存活时间 = 浏览器会话周期（关闭即失效），或设置较短超时（如 1 小时无操作）
 - 解密密钥不放入 JWT payload，而是存储在 `app.state.decrypt_key`（服务器端内存）
 - JWT 仅携带 session_id，用于关联服务器端缓存的密钥
 
-### 7.4 攻击面分析
+### 8.4 攻击面分析
 
 | 攻击场景 | 防护措施 |
 |----------|---------|
@@ -436,7 +521,7 @@ AES-256-GCM 加密
 
 ---
 
-## 八、启动流程
+## 九、启动流程
 
 ```
 FastAPI lifespan 启动
@@ -463,9 +548,9 @@ FastAPI lifespan 启动
 
 ---
 
-## 九、依赖拓扑与实现顺序
+## 十、依赖拓扑与实现顺序
 
-### 9.1 模块依赖关系
+### 10.1 模块依赖关系
 
 ```
                     ┌─────────────┐
@@ -514,7 +599,7 @@ FastAPI lifespan 启动
                        └─────────────┘
 ```
 
-### 9.2 推荐实现顺序
+### 10.2 推荐实现顺序
 
 ```
 Phase 1 (骨架)
@@ -552,9 +637,9 @@ Phase 6 (米游社)
 
 ---
 
-## 十、推送模块
+## 十一、推送模块
 
-### 10.1 支持的推送渠道
+### 11.1 支持的推送渠道
 
 | 渠道 | 配置方式 | 用途 |
 |------|----------|------|
@@ -576,7 +661,7 @@ Phase 6 (米游社)
 | Discord | Webhook URL | Discord 频道推送 |
 | WxPusher | App Token + UID | 微信推送 |
 
-### 10.2 推送等级
+### 11.2 推送等级
 
 | 等级 | 行为 |
 |------|------|
@@ -586,9 +671,9 @@ Phase 6 (米游社)
 
 ---
 
-## 十一、部署方案
+## 十二、部署方案
 
-### 11.1 本地部署
+### 12.1 本地部署
 
 ```bash
 uv sync
@@ -596,7 +681,7 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 # 浏览器访问 http://127.0.0.1:8000
 ```
 
-### 11.2 Docker 部署
+### 12.2 Docker 部署
 
 ```yaml
 # docker-compose.yml
@@ -615,9 +700,9 @@ services:
 
 ---
 
-## 十二、扩展性设计
+## 十三、扩展性设计
 
-### 12.1 新增游戏
+### 13.1 新增游戏
 
 对于已有的插件（如 mhy_plugin），只需在 `games/` 下新增一个文件：
 
@@ -637,13 +722,13 @@ class ThemisGame(BaseGame):
 
 然后在 `plugin.py` 的 `supported_games` 中加上即可。
 
-### 12.2 新增插件平台
+### 13.2 新增插件平台
 
 创建一个新目录 `plugins/ark_plugin/`，实现 `BaseGamePlugin`。放到 `plugins/` 或 `user_plugins/` 后重启即生效，前端自动出现对应的插件卡片。
 
 ---
 
-## 十三、技术债务与风险
+## 十四、技术债务与风险
 
 | 风险 | 影响 | 缓解措施 |
 |------|------|---------|
