@@ -1,6 +1,7 @@
-"""认证 API — 密码解锁 / 锁定."""
+"""认证 API — 密码解锁 / 锁定 / 修改密码."""
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from app.core.auth import create_access_token
 from app.core.vault import Vault, VaultLockedError
@@ -12,6 +13,11 @@ from app.schemas.auth import (
 )
 
 router = APIRouter(prefix="/api", tags=["auth"])
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=1, max_length=128)
 
 
 @router.post("/unlock", response_model=UnlockResponse)
@@ -41,6 +47,21 @@ async def lock(request: Request):
     request.app.state.is_unlocked = False
 
     return LockResponse(message="已锁定")
+
+
+@router.put("/unlock/password")
+async def change_password(request: Request, body: ChangePasswordRequest):
+    """修改解锁密码."""
+    vault: Vault = request.app.state.vault
+
+    if not vault.is_unlocked:
+        raise HTTPException(status_code=403, detail="请先解锁")
+
+    success = await vault.change_password(body.old_password, body.new_password)
+    if not success:
+        raise HTTPException(status_code=401, detail="旧密码错误")
+
+    return {"message": "密码已修改"}
 
 
 @router.get("/status", response_model=StatusResponse)

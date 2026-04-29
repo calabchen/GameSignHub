@@ -46,6 +46,10 @@ async def lifespan(app: FastAPI):
     session_factory = get_session_factory()
     vault = Vault(session_factory)
 
+    # 首次启动自动设置默认密码 12345678
+    if await vault.ensure_default_password():
+        print("首次启动，已设置默认密码: 12345678")
+
     # 加载插件
     loader = PluginLoader()
     plugin_registry = loader.load_all()

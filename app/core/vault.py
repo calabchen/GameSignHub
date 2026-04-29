@@ -88,6 +88,51 @@ class Vault:
     async def is_password_set(self) -> bool:
         return not await self._is_first_time()
 
+    async def ensure_default_password(self) -> bool:
+        """首次启动时设置默认密码 12345678."""
+        if await self._is_first_time():
+            await self._initialize("12345678")
+            logger.info("已设置默认密码 12345678")
+            return True
+        return False
+
+    async def change_password(self, old_password: str, new_password: str) -> bool:
+        """修改密码，重新加密所有凭据."""
+        if not self.is_unlocked:
+            raise VaultLockedError()
+
+        # 验证旧密码
+        if not await self._check_password(old_password):
+            return False
+
+        # 用新密码派生密钥
+        new_key = derive_encryption_key(new_password)
+
+        # 重新加密所有凭据
+        old_enc = EncryptionService(self._decrypt_key)
+        new_enc = EncryptionService(new_key)
+
+        async with self._session_factory() as session:
+            stmt = select(Credential)
+            r = await session.execute(stmt)
+            rows = r.scalars().all()
+
+            for row in rows:
+                plaintext = old_enc.decrypt(row.encrypted_data)
+                row.encrypted_data = new_enc.encrypt(plaintext)
+
+            # 更新密码哈希
+            hash_row = await session.get(Config, "password_hash")
+            if hash_row:
+                hash_row.value = hash_password(new_password)
+
+            await session.commit()
+
+        # 更新内存密钥
+        self._decrypt_key = new_key
+        logger.info("密码已修改")
+        return True
+
     def get_credentials(self, plugin_id: str) -> list[dict]:
         """获取某个插件的所有解密凭据（内存缓存）."""
         if not self.is_unlocked:
