@@ -1,4 +1,4 @@
-"""签到日志查询 API."""
+﻿"""签到日志查询 API。"""
 
 from fastapi import APIRouter, Query, Request
 
@@ -18,7 +18,7 @@ async def list_logs(
     status: str | None = Query(default=None),
     credential_id: int | None = Query(default=None),
 ):
-    """查询签到日志."""
+    """分页查询签到日志，支持按游戏社区、游戏账户、游戏和状态筛选。"""
     oc: Orchestrator = request.app.state.orchestrator
     rows, total = await oc.get_logs(
         page=page,
@@ -50,7 +50,7 @@ async def list_logs(
 
 @router.get("/today", response_model=TodaySummary)
 async def today_summary(request: Request):
-    """今日签到汇总."""
+    """获取今日签到统计汇总。"""
     oc: Orchestrator = request.app.state.orchestrator
     data = await oc.get_today_summary()
     return TodaySummary(**data)
@@ -58,7 +58,7 @@ async def today_summary(request: Request):
 
 @router.delete("")
 async def clear_logs(request: Request):
-    """清除所有签到日志."""
+    """清空全部签到日志记录。"""
     oc: Orchestrator = request.app.state.orchestrator
     count = await oc.clear_logs()
     return {"message": f"已清除 {count} 条日志"}

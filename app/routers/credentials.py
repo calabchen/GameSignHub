@@ -1,4 +1,4 @@
-"""凭据管理 API — CRUD + 验证."""
+﻿"""游戏账户管理 API：增删改查与校验。"""
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -22,12 +22,14 @@ def _get_vault(request: Request) -> Vault:
 
 @router.get("", response_model=list[CredentialSummary])
 async def list_credentials(request: Request):
+    """获取游戏账户列表，在屏保已解锁时返回账户摘要。"""
     vault = _get_vault(request)
     return vault.list_summaries()
 
 
 @router.post("", response_model=CredentialSummary)
 async def create_credential(request: Request, body: CredentialCreate):
+    """创建游戏账户，在提供社区 ID 与账户信息时保存记录。"""
     vault = _get_vault(request)
 
     data = {
@@ -53,6 +55,7 @@ async def create_credential(request: Request, body: CredentialCreate):
 
 @router.put("/{credential_id}", response_model=CredentialSummary)
 async def update_credential(request: Request, credential_id: int, body: CredentialUpdate):
+    """更新游戏账户，在账户 ID 存在时覆盖可变字段。"""
     vault = _get_vault(request)
 
     for plugin_id, creds in vault.get_all_credentials().items():
@@ -80,6 +83,7 @@ async def update_credential(request: Request, credential_id: int, body: Credenti
 
 @router.delete("/{credential_id}")
 async def delete_credential(request: Request, credential_id: int):
+    """删除游戏账户，在账户 ID 存在时移除该记录。"""
     vault = _get_vault(request)
     await vault.delete_credential(credential_id)
     return {"message": "deleted"}
@@ -87,6 +91,7 @@ async def delete_credential(request: Request, credential_id: int):
 
 @router.post("/{credential_id}/validate", response_model=ValidateResult)
 async def validate_credential(request: Request, credential_id: int):
+    """校验游戏账户，在对应游戏社区可访问时返回有效性。"""
     vault = _get_vault(request)
 
     for creds in vault.get_all_credentials().values():

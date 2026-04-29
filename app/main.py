@@ -36,13 +36,13 @@ async def vault_locked_handler(request: Request, exc: VaultLockedError) -> JSONR
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理：启动时初始化 DB + 加载插件 + 创建 Vault + Orchestrator."""
+    """应用生命周期管理：启动时初始化 DB + 加载游戏社区 + 创建屏保 + 编排器。"""
     settings = get_settings()
 
     # 初始化数据库表
     await init_db()
 
-    # 创建凭据保险库
+    # 创建游戏账户屏保
     session_factory = get_session_factory()
     vault = Vault(session_factory)
 
@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
     if await vault.ensure_default_password():
         print("首次启动，已设置默认密码: abcdefgh")
 
-    # 加载插件
+    # 加载游戏社区
     loader = PluginLoader()
     plugin_registry = loader.load_all()
 
@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler
     app.state.is_unlocked = False
 
-    print(f"GameSignHub 启动完成。已加载 {len(plugin_registry)} 个插件: {list(plugin_registry.keys())}")
+    print(f"GameSignHub 启动完成。已加载 {len(plugin_registry)} 个游戏社区: {list(plugin_registry.keys())}")
     yield
 
     # 关闭时清理
@@ -109,7 +109,7 @@ def create_app() -> FastAPI:
     app.include_router(schedule_router.router)
 
     # 根路径
-    @app.get("/")
+    @app.get("/", include_in_schema=False)
     async def root():
         return {"name": "GameSignHub", "version": "0.3.0", "status": "running"}
 

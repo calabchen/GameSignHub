@@ -1,10 +1,10 @@
-"""认证 API — 密码解锁 / 锁定 / 修改密码."""
+﻿"""认证 API：密码解锁、锁定与改密。"""
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.core.auth import create_access_token
-from app.core.vault import Vault, VaultLockedError
+from app.core.vault import Vault
 from app.schemas.auth import (
     LockResponse,
     StatusResponse,
@@ -22,7 +22,7 @@ class ChangePasswordRequest(BaseModel):
 
 @router.post("/unlock", response_model=UnlockResponse)
 async def unlock(request: Request, body: UnlockRequest):
-    """密码解锁保险库，返回 JWT."""
+    """解锁屏保，使用有效密码并返回访问令牌。"""
     vault: Vault = request.app.state.vault
 
     success, is_first_time = await vault.unlock(body.password)
@@ -37,11 +37,11 @@ async def unlock(request: Request, body: UnlockRequest):
 
 @router.post("/lock", response_model=LockResponse)
 async def lock(request: Request):
-    """锁定保险库，销毁解密密钥."""
+    """锁定屏保，在当前处于解锁状态时清除会话密钥。"""
     vault: Vault = request.app.state.vault
 
     if not vault.is_unlocked:
-        raise HTTPException(status_code=400, detail="保险库已处于锁定状态")
+        raise HTTPException(status_code=400, detail="屏保已处于锁定状态")
 
     vault.lock()
     request.app.state.is_unlocked = False
@@ -51,7 +51,7 @@ async def lock(request: Request):
 
 @router.put("/unlock/password")
 async def change_password(request: Request, body: ChangePasswordRequest):
-    """修改解锁密码."""
+    """修改屏保密码，在当前已解锁且旧密码正确时生效。"""
     vault: Vault = request.app.state.vault
 
     if not vault.is_unlocked:
@@ -66,7 +66,7 @@ async def change_password(request: Request, body: ChangePasswordRequest):
 
 @router.get("/status", response_model=StatusResponse)
 async def status(request: Request):
-    """获取当前系统状态."""
+    """获取屏保状态，在任意登录态下返回解锁与加载信息。"""
     vault: Vault = request.app.state.vault
 
     return StatusResponse(
@@ -74,3 +74,4 @@ async def status(request: Request):
         is_password_set=await vault.is_password_set(),
         plugins_loaded=len(request.app.state.plugin_registry),
     )
+

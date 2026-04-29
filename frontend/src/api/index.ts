@@ -41,18 +41,18 @@ export async function validateCredential(id: number) {
   return res.data
 }
 
-export async function signCredential(credId: number) {
-  const res = await api.post(`/api/sign/credential/${credId}`)
+export async function signCredential(pluginId: string, credId: number, gameId: string) {
+  const res = await api.post(`/api/signs/plugins/${pluginId}/credentials/${credId}/games/${gameId}`)
   return res.data
 }
 
 export async function signPlugin(pluginId: string) {
-  const res = await api.post(`/api/sign/plugin/${pluginId}`)
+  const res = await api.post(`/api/signs/plugins/${pluginId}`)
   return res.data
 }
 
 export async function signAll() {
-  const res = await api.post('/api/sign/all')
+  const res = await api.post('/api/schedules/triggers')
   return res.data
 }
 

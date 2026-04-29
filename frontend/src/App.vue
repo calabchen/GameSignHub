@@ -1,47 +1,47 @@
 <script setup lang="ts">
-import { watch, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useAppStore } from '@/stores/app'
-import { Lock, Monitor, User, Document, Key } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import { api } from '@/api'
+  import { watch, onMounted, ref } from 'vue'
+  import { useRoute, useRouter } from 'vue-router'
+  import { useAppStore } from '@/stores/app'
+  import { Lock, Monitor, User, Document, Key } from '@element-plus/icons-vue'
+  import { ElMessage } from 'element-plus'
+  import { api } from '@/api'
 
-const route = useRoute()
-const router = useRouter()
-const store = useAppStore()
+  const route = useRoute()
+  const router = useRouter()
+  const store = useAppStore()
 
-onMounted(async () => {
-  await store.checkStatus()
-  if (!store.isUnlocked && route.path !== '/') {
-    router.replace('/')
+  onMounted(async () => {
+    await store.checkStatus()
+    if (!store.isUnlocked && route.path !== '/') {
+      router.replace('/')
+    }
+  })
+
+  watch(() => store.isUnlocked, (unlocked) => {
+    if (!unlocked && route.path !== '/') router.replace('/')
+  })
+
+  // ------ 修改密码 ------
+  const passwordDialog = ref(false)
+  const pwdForm = ref({ old: '', new1: '', new2: '' })
+
+  async function changePassword() {
+    if (pwdForm.value.new1 !== pwdForm.value.new2) {
+      ElMessage.warning('两次输入的新密码不一致')
+      return
+    }
+    try {
+      await api.put('/api/unlock/password', {
+        old_password: pwdForm.value.old,
+        new_password: pwdForm.value.new1,
+      })
+      ElMessage.success('密码已修改')
+      passwordDialog.value = false
+      pwdForm.value = { old: '', new1: '', new2: '' }
+    } catch (e: any) {
+      ElMessage.error(e.response?.data?.detail || '修改失败')
+    }
   }
-})
-
-watch(() => store.isUnlocked, (unlocked) => {
-  if (!unlocked && route.path !== '/') router.replace('/')
-})
-
-// ------ 修改密码 ------
-const passwordDialog = ref(false)
-const pwdForm = ref({ old: '', new1: '', new2: '' })
-
-async function changePassword() {
-  if (pwdForm.value.new1 !== pwdForm.value.new2) {
-    ElMessage.warning('两次输入的新密码不一致')
-    return
-  }
-  try {
-    await api.put('/api/unlock/password', {
-      old_password: pwdForm.value.old,
-      new_password: pwdForm.value.new1,
-    })
-    ElMessage.success('密码已修改')
-    passwordDialog.value = false
-    pwdForm.value = { old: '', new1: '', new2: '' }
-  } catch (e: any) {
-    ElMessage.error(e.response?.data?.detail || '修改失败')
-  }
-}
 </script>
 
 <template>
@@ -54,27 +54,30 @@ async function changePassword() {
         <div style="height:56px;display:flex;align-items:center;padding:0 20px;border-bottom:1px solid #e4e7ed">
           <span style="font-size:16px;font-weight:600;color:#303133">游戏签到中心</span>
         </div>
-        <el-menu
-          :default-active="route.path"
-          router
-          style="border-right:none"
-        >
+        <el-menu :default-active="route.path" router style="border-right:none">
           <el-menu-item index="/dashboard">
-            <el-icon><Monitor /></el-icon>
+            <el-icon>
+              <Monitor />
+            </el-icon>
             <template #title>控制面板</template>
           </el-menu-item>
           <el-menu-item index="/credentials">
-            <el-icon><User /></el-icon>
-            <template #title>凭据管理</template>
+            <el-icon>
+              <User />
+            </el-icon>
+            <template #title>账户管理</template>
           </el-menu-item>
           <el-menu-item index="/logs">
-            <el-icon><Document /></el-icon>
+            <el-icon>
+              <Document />
+            </el-icon>
             <template #title>签到日志</template>
           </el-menu-item>
         </el-menu>
       </el-aside>
       <el-container>
-        <el-header style="height:56px;display:flex;align-items:center;justify-content:flex-end;border-bottom:1px solid #e4e7ed;padding:0 20px">
+        <el-header
+          style="height:56px;display:flex;align-items:center;justify-content:flex-end;border-bottom:1px solid #e4e7ed;padding:0 20px">
           <span style="margin-right:16px;color:#909399;font-size:13px">已解锁</span>
           <el-button :icon="Key" text @click="passwordDialog = true" style="margin-right:8px">改密</el-button>
           <el-button :icon="Lock" text @click="store.lock()">锁定</el-button>
@@ -107,6 +110,15 @@ async function changePassword() {
 </template>
 
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html, body, #app { height: 100%; }
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
 </style>

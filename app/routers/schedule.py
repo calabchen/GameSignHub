@@ -1,10 +1,10 @@
-"""定时调度 API — 查看/修改 cron + 手动触发."""
+﻿"""定时调度 API：查看、修改计划并支持手动触发。"""
 
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.scheduler import SignScheduler
 
-router = APIRouter(prefix="/api/schedule", tags=["schedule"])
+router = APIRouter(prefix="/api/schedules", tags=["schedule"])
 
 
 def _get_scheduler(request: Request) -> SignScheduler:
@@ -15,20 +15,15 @@ def _get_scheduler(request: Request) -> SignScheduler:
 
 
 @router.get("")
-async def get_schedule(request: Request):
-    """获取当前调度配置."""
+async def get_schedules(request: Request):
+    """获取当前签到调度配置。"""
     sched = _get_scheduler(request)
     return await sched.get_config()
 
 
 @router.put("")
-async def update_schedule(request: Request, body: dict):
-    """更新调度配置.
-
-    Body:
-        cron: str   — cron 表达式 (e.g. "0 7 * * *")
-        enabled: bool — 是否启用
-    """
+async def update_schedules(request: Request, body: dict):
+    """更新 cron 表达式与调度启用状态。"""
     sched = _get_scheduler(request)
     cron_expr = body.get("cron", "0 7 * * *")
     enabled = body.get("enabled", True)
@@ -36,9 +31,9 @@ async def update_schedule(request: Request, body: dict):
     return {"message": "已更新", "cron": cron_expr, "enabled": enabled}
 
 
-@router.post("/trigger")
-async def trigger_schedule(request: Request):
-    """手动触发一次签到."""
+@router.post("/triggers")
+async def trigger_schedules(request: Request):
+    """立即手动触发一次签到任务。"""
     sched = _get_scheduler(request)
     try:
         await sched.trigger_now()
