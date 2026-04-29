@@ -6,6 +6,14 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
 export async function fetchPlugins() {
   const res = await api.get('/api/plugins')
   return res.data
@@ -68,5 +76,20 @@ export async function fetchTodaySummary() {
 
 export async function clearLogs() {
   const res = await api.delete('/api/logs')
+  return res.data
+}
+
+export async function fetchCredentialSchedule(id: number, gameId: string) {
+  const res = await api.get(`/api/credentials/${id}/schedule/${gameId}`)
+  return res.data
+}
+
+export async function updateCredentialSchedule(id: number, gameId: string, cron: string, enabled: boolean) {
+  const res = await api.put(`/api/credentials/${id}/schedule/${gameId}`, { cron, enabled })
+  return res.data
+}
+
+export async function fetchCredentialDetail(id: number) {
+  const res = await api.get(`/api/credentials/${id}/detail`)
   return res.data
 }

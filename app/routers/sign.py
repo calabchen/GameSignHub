@@ -1,24 +1,26 @@
 ﻿"""签到触发 API。"""
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.core.auth import verify_access_token
 from app.core.orchestrator import Orchestrator
 from app.schemas.sign import SignInResponse
 
 router = APIRouter(prefix="/api/signs", tags=["sign"])
+security = HTTPBearer()
 
 
-def _get_orchestrator(request: Request) -> Orchestrator:
-    oc: Orchestrator = request.app.state.orchestrator
-    if oc is None:
-        raise HTTPException(status_code=500, detail="Orchestrator not initialized")
-    return oc
+def _auth(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        verify_access_token(credentials.credentials)
+    except Exception:
+        raise HTTPException(status_code=401, detail="未授权")
 
 
 @router.post("/plugins/{plugin_id}/credentials/{cred_id}/games/{game_id}", response_model=SignInResponse)
-async def sign_onces(request: Request, plugin_id: str, cred_id: int, game_id: str):
-    """触发游戏社区签到，在单游戏社区与单游戏账户下执行一次。"""
-    oc = _get_orchestrator(request)
+async def sign_once(request: Request, plugin_id: str, cred_id: int, game_id: str, _=Depends(_auth)):
+    oc: Orchestrator = request.app.state.orchestrator
     try:
         logs = await oc.sign_once(plugin_id, cred_id, game_id)
     except ValueError as e:
@@ -30,12 +32,10 @@ def _logs_to_response(logs) -> SignInResponse:
     results: dict[str, list] = {}
     for log in logs:
         key = log.game_id
-        results.setdefault(key, []).append(
-            {
-                "game_id": log.game_id,
-                "status": log.status,
-                "reward": log.reward,
-                "message": log.message,
-            }
-        )
+        results.setdefault(key, []).append({
+            "game_id": log.game_id,
+            "status": log.status,
+            "reward": log.reward,
+            "message": log.message,
+        })
     return SignInResponse(results=results)

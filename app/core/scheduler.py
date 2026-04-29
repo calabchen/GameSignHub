@@ -1,146 +1,104 @@
-"""定时任务调度器 — APScheduler 封装.
+"""定时任务调度器 — APScheduler 封装。
 
-负责定时签到的 cron 调度，配置持久化在 configs 表中。
-支持运行时修改 cron 表达式、启用/禁用、手动触发。
+每个凭据的每个游戏可独立 cron，持久化在 config/{plugin_id}/{id}.yaml 中。
+job_id = "sign_{cred_id}_{game_id}"
 """
 
 import logging
-from datetime import UTC, datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-from app.models.config import Config
 
 logger = logging.getLogger("app.scheduler")
 
-DEFAULT_CRON = "0 7 * * *"  # 每天 07:00
+DEFAULT_CRON = "0 7 * * *"
 
 
 class SignScheduler:
-    """签到任务调度器."""
-
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
         self._aps = AsyncIOScheduler()
+        self._sign_once_fn = None
         self._sign_all_fn = None
         self._running = False
+        self._yaml_store = None
 
-    def set_sign_fn(self, fn):
-        """设置签到回调函数 (orchestrator.sign_all)."""
+    def set_sign_once_fn(self, fn):
+        self._sign_once_fn = fn
+
+    def set_sign_all_fn(self, fn):
         self._sign_all_fn = fn
 
-    async def start(self) -> None:
-        """启动调度器，从数据库加载配置."""
-        cron_expr, enabled = await self._load_config()
+    def set_yaml_store(self, store):
+        self._yaml_store = store
 
-        if enabled and cron_expr:
-            self._add_job(cron_expr)
-            logger.info("调度器已启动，cron=%s", cron_expr)
-        else:
-            logger.info("调度器未启用或未配置 cron")
+    async def start(self) -> None:
+        count = 0
+        if self._yaml_store:
+            for item in self._yaml_store.get_all_with_schedules():
+                self._add_job(item["id"], item["plugin_id"], item["game_id"], item["schedule_cron"])
+                count += 1
 
         self._aps.start()
+        logger.info("调度器已启动，已注册 %d 个游戏定时任务", count)
 
     async def shutdown(self) -> None:
-        """关闭调度器."""
         self._aps.shutdown(wait=False)
         logger.info("调度器已关闭")
 
-    async def get_config(self) -> dict:
-        """获取当前调度配置."""
-        cron_expr, enabled = await self._load_config()
-        return {
-            "cron": cron_expr or DEFAULT_CRON,
-            "enabled": enabled,
-            "running": self._running,
-        }
+    def register(self, cred_id: int, plugin_id: str, game_id: str, cron: str) -> None:
+        self._remove_job(cred_id, game_id)
+        if cron:
+            self._add_job(cred_id, plugin_id, game_id, cron)
+            logger.info("已注册定时 sign_%d_%s cron=%s", cred_id, game_id, cron)
 
-    async def set_cron(self, cron_expr: str, enabled: bool = True) -> None:
-        """修改 cron 表达式并持久化."""
-        async with self._session_factory() as session:
-            # 保存 cron
-            await self._upsert_config(session, "schedule_cron", cron_expr)
-            # 保存启用状态
-            await self._upsert_config(session, "schedule_enabled", "1" if enabled else "0")
-            await session.commit()
-
-        self._remove_existing_job()
-        if enabled:
-            self._add_job(cron_expr)
-            logger.info("cron 已更新: %s", cron_expr)
-        else:
-            logger.info("定时签到已禁用")
+    def remove_credential(self, cred_id: int) -> None:
+        for game_id in ("wuwa", "pgr"):
+            self._remove_job(cred_id, game_id)
 
     async def trigger_now(self) -> None:
-        """立即触发一次签到."""
         if self._sign_all_fn is None:
             raise RuntimeError("sign_all function not set")
-
         self._running = True
         try:
-            logger.info("手动触发签到...")
             await self._sign_all_fn()
         finally:
             self._running = False
 
-    # ----------------------------------------------------------------
-    # Internal
-    # ----------------------------------------------------------------
+    async def get_config(self) -> dict:
+        return {"cron": "", "enabled": False, "running": self._running}
 
-    async def _load_config(self) -> tuple[str, bool]:
-        async with self._session_factory() as session:
-            cron_row = await session.get(Config, "schedule_cron")
-            enabled_row = await session.get(Config, "schedule_enabled")
+    async def set_cron(self, cron_expr: str, enabled: bool = True) -> None:
+        pass
 
-        cron_expr = cron_row.value if cron_row and cron_row.value else ""
-        enabled = enabled_row.value != "0" if enabled_row else False
-        return cron_expr, enabled
-
-    def _add_job(self, cron_expr: str) -> None:
-        if self._sign_all_fn is None:
-            return
-
+    def _add_job(self, cred_id: int, plugin_id: str, game_id: str, cron_expr: str) -> None:
+        job_id = f"sign_{cred_id}_{game_id}"
         try:
             trigger = CronTrigger.from_crontab(cron_expr)
         except Exception as e:
-            logger.warning("无效的 cron 表达式 '%s': %s", cron_expr, e)
+            logger.warning("无效 cron '%s': %s，使用默认", cron_expr, e)
             trigger = CronTrigger.from_crontab(DEFAULT_CRON)
 
         self._aps.add_job(
-            self._wrapped_sign,
+            lambda pid=plugin_id, cid=cred_id, gid=game_id: self._wrapped_sign(pid, cid, gid),
             trigger=trigger,
-            id="sign_all_job",
-            name="签到定时任务",
+            id=job_id,
+            name=f"凭据#{cred_id}-{game_id}定时签到",
             replace_existing=True,
         )
 
-    def _remove_existing_job(self) -> None:
+    def _remove_job(self, cred_id: int, game_id: str) -> None:
         try:
-            self._aps.remove_job("sign_all_job")
+            self._aps.remove_job(f"sign_{cred_id}_{game_id}")
         except Exception:
             pass
 
-    async def _wrapped_sign(self) -> None:
-        if self._running:
-            logger.info("上次签到仍在执行，跳过")
+    async def _wrapped_sign(self, plugin_id: str, cred_id: int, game_id: str) -> None:
+        if self._sign_once_fn is None:
             return
-        self._running = True
         try:
-            logger.info("定时签到开始")
-            await self._sign_all_fn()
-            logger.info("定时签到完成")
+            logger.info("定时签到 cred=%d game=%s", cred_id, game_id)
+            await self._sign_once_fn(plugin_id, cred_id, game_id)
         except Exception as e:
-            logger.error("定时签到失败: %s", e)
-        finally:
-            self._running = False
-
-    @staticmethod
-    async def _upsert_config(session: AsyncSession, key: str, value: str) -> None:
-        row = await session.get(Config, key)
-        if row:
-            row.value = value
-        else:
-            session.add(Config(key=key, value=value))
+            logger.error("定时签到 cred=%d game=%s 失败: %s", cred_id, game_id, e)

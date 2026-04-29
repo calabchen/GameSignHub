@@ -1,18 +1,17 @@
 ﻿"""认证 API：密码解锁、锁定与改密。"""
 
+import yaml
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.core.auth import create_access_token
-from app.core.vault import Vault
-from app.schemas.auth import (
-    LockResponse,
-    StatusResponse,
-    UnlockRequest,
-    UnlockResponse,
-)
+from app.core.auth import create_access_token, hash_password, verify_password
+from app.schemas.auth import LockResponse, StatusResponse, UnlockRequest, UnlockResponse
 
 router = APIRouter(prefix="/api", tags=["auth"])
+
+SETTINGS_PATH = Path("config") / "settings.yaml"
 
 
 class ChangePasswordRequest(BaseModel):
@@ -20,58 +19,67 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=1, max_length=128)
 
 
+def _read_settings() -> dict:
+    if SETTINGS_PATH.exists():
+        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def _write_password_hash(hash_val: str) -> None:
+    data = _read_settings()
+    data["password_hash"] = hash_val
+    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+        yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+
+
+def _is_password_set() -> bool:
+    return bool(_read_settings().get("password_hash"))
+
+
 @router.post("/unlock", response_model=UnlockResponse)
 async def unlock(request: Request, body: UnlockRequest):
-    """解锁屏保，使用有效密码并返回访问令牌。"""
-    vault: Vault = request.app.state.vault
+    settings = _read_settings()
+    password_hash = settings.get("password_hash")
 
-    success, is_first_time = await vault.unlock(body.password)
-    if not success:
-        raise HTTPException(status_code=401, detail="密码错误")
+    if not password_hash:
+        password_hash = hash_password(body.password)
+        _write_password_hash(password_hash)
+        is_first = True
+    else:
+        if not verify_password(body.password, password_hash):
+            raise HTTPException(status_code=401, detail="密码错误")
+        is_first = False
 
-    token = create_access_token(vault.session_id)
+    token = create_access_token()
     request.app.state.is_unlocked = True
 
-    return UnlockResponse(token=token, is_first_time=is_first_time)
+    return UnlockResponse(token=token, is_first_time=is_first)
 
 
 @router.post("/lock", response_model=LockResponse)
 async def lock(request: Request):
-    """锁定屏保，在当前处于解锁状态时清除会话密钥。"""
-    vault: Vault = request.app.state.vault
-
-    if not vault.is_unlocked:
-        raise HTTPException(status_code=400, detail="屏保已处于锁定状态")
-
-    vault.lock()
     request.app.state.is_unlocked = False
-
     return LockResponse(message="已锁定")
 
 
 @router.put("/unlock/password")
 async def change_password(request: Request, body: ChangePasswordRequest):
-    """修改屏保密码，在当前已解锁且旧密码正确时生效。"""
-    vault: Vault = request.app.state.vault
+    settings = _read_settings()
+    current_hash = settings.get("password_hash", "")
 
-    if not vault.is_unlocked:
-        raise HTTPException(status_code=403, detail="请先解锁")
-
-    success = await vault.change_password(body.old_password, body.new_password)
-    if not success:
+    if not verify_password(body.old_password, current_hash):
         raise HTTPException(status_code=401, detail="旧密码错误")
 
+    _write_password_hash(hash_password(body.new_password))
     return {"message": "密码已修改"}
 
 
 @router.get("/status", response_model=StatusResponse)
 async def status(request: Request):
-    """获取屏保状态，在任意登录态下返回解锁与加载信息。"""
-    vault: Vault = request.app.state.vault
-
     return StatusResponse(
-        is_unlocked=vault.is_unlocked,
-        is_password_set=await vault.is_password_set(),
+        is_unlocked=request.app.state.is_unlocked,
+        is_password_set=_is_password_set(),
         plugins_loaded=len(request.app.state.plugin_registry),
     )
-

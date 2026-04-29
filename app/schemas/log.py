@@ -14,6 +14,7 @@ class SignLogEntry(BaseModel):
     status: str
     reward: str
     message: str
+    elapsed: float = 0.0
     signed_at: str
     created_at: str
 

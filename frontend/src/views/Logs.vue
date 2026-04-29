@@ -10,12 +10,20 @@ const page = ref(1)
 const pageSize = ref(15)
 const filterStatus = ref('')
 const filterPlugin = ref('')
+const filterDateRange = ref<[string, string] | null>(null)
 const today = ref({ success: 0, already: 0, failed: 0, total: 0 })
 
 const plugins = ref<any[]>([])
 
 onMounted(refresh)
-watch([page, filterStatus, filterPlugin], refresh)
+watch([page, filterStatus, filterPlugin, filterDateRange], refresh)
+
+function formatDate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 async function refresh() {
   try {
@@ -24,6 +32,10 @@ async function refresh() {
         const params: any = { page: page.value, page_size: pageSize.value }
         if (filterStatus.value) params.status = filterStatus.value
         if (filterPlugin.value) params.plugin_id = filterPlugin.value
+        if (filterDateRange.value) {
+          params.date_from = filterDateRange.value[0]
+          params.date_to = filterDateRange.value[1]
+        }
         return fetchLogs(params)
       })(),
       fetchTodaySummary(),
@@ -44,6 +56,12 @@ function statusTag(s: string) {
   if (s === 'already') return 'info'
   if (s === 'failed') return 'danger'
   return ''
+}
+
+function formatElapsed(sec: number): string {
+  if (sec == null) return '-'
+  if (sec < 1) return `${Math.round(sec * 1000)}ms`
+  return `${sec.toFixed(1)}s`
 }
 
 async function handleClear() {
@@ -74,6 +92,17 @@ async function handleClear() {
           <el-option label="全部" value="" />
           <el-option v-for="p in plugins" :key="p.id" :label="p.name" :value="p.id" />
         </el-select>
+        <el-date-picker
+          v-model="filterDateRange"
+          type="daterange"
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          size="small"
+          style="width:240px"
+          format="YYYY-MM-DD"
+          value-format="YYYY-MM-DD"
+        />
         <el-button size="small" type="danger" :icon="Delete" @click="handleClear">清除</el-button>
       </div>
     </div>
@@ -105,6 +134,11 @@ async function handleClear() {
       <el-table-column prop="game_id" label="游戏" width="100" />
       <el-table-column label="账号" min-width="100">
         <template #default="{ row }">{{ row.credential_name || '#' + row.credential_id }}</template>
+      </el-table-column>
+      <el-table-column label="耗时" width="80" align="center">
+        <template #default="{ row }">
+          <span style="font-size:12px;color:#909399">{{ formatElapsed(row.elapsed) }}</span>
+        </template>
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">

@@ -49,7 +49,7 @@ async def get_plugin(request: Request, plugin_id: str) -> dict:
         "description": info.description,
         "homepage": info.homepage,
         "supported_games": [
-            {"id": g.id, "name": g.name, "has_forum": g.has_forum, "icon": g.icon, "icon_url": g.icon_url}
+            {"id": g.id, "name": g.name, "has_forum": g.has_forum, "icon": g.icon}
             for g in info.supported_games
         ],
     }

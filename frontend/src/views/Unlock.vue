@@ -15,7 +15,7 @@ async function handleUnlock() {
   try {
     const result = await store.unlock(password.value)
     if (result.ok) {
-      router.push('/dashboard')
+      router.push('/app')
     } else {
       ElMessage.error('密码错误')
       password.value = ''
@@ -54,6 +54,13 @@ async function handleUnlock() {
       />
 
       <el-input
+        :model-value="'admin'"
+        size="large"
+        disabled
+        style="margin-bottom:12px"
+      />
+
+      <el-input
         v-model="password"
         type="password"
         :placeholder="store.isPasswordSet ? '主密码' : '设置主密码'"
@@ -73,7 +80,7 @@ async function handleUnlock() {
       </el-button>
 
       <p style="text-align:center;margin-top:20px;color:#c0c4cc;font-size:12px">
-        默认密码: abcdefgh &nbsp;|&nbsp; 本地服务 · 127.0.0.1:18000
+        admin
       </p>
     </el-card>
   </div>

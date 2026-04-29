@@ -1,13 +1,12 @@
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 import httpx
 
 from app.database import Base
 from app.config import Settings, get_settings
-from app.core.vault import Vault, VaultLockedError
+from app.core.yaml_store import YamlStore
 from app.core.orchestrator import Orchestrator
 from app.core.plugin_base import BaseGamePlugin, PluginInfo, GameInfo, SignInResult
 
@@ -31,7 +30,7 @@ async def test_session_factory(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     db_url = f"sqlite+aiosqlite:///{db_path}"
 
-    test_settings = Settings(database_url=db_url, secret_key="test-jwt-secret-key")
+    test_settings = Settings(database_url=db_url, secret_key="test-jwt-secret-key", config_dir=tmp_path / "config")
     monkeypatch.setattr(_cfg, "get_settings", lambda: test_settings)
 
     engine = create_async_engine(db_url, echo=False)
@@ -39,18 +38,17 @@ async def test_session_factory(tmp_path, monkeypatch):
         await conn.run_sync(Base.metadata.create_all)
 
     factory = async_sessionmaker(engine, expire_on_commit=False)
+    (tmp_path / "config").mkdir(parents=True, exist_ok=True)
     yield factory
 
     await engine.dispose()
 
 
 @pytest_asyncio.fixture
-async def vault(test_session_factory):
-    v = Vault(test_session_factory)
-    await v.ensure_default_password()
-    ok, _ = await v.unlock("abcdefgh")
-    assert ok
-    return v
+async def yaml_store(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return YamlStore(str(config_dir))
 
 
 class _MockPlugin(BaseGamePlugin):
@@ -85,24 +83,22 @@ class _MockPlugin(BaseGamePlugin):
 
 @pytest_asyncio.fixture
 def mock_plugin_registry():
-    plugin = _MockPlugin()
-    return {"mock": plugin}
+    return {"mock": _MockPlugin()}
 
 
 @pytest_asyncio.fixture
-async def test_app(test_session_factory, vault, mock_plugin_registry):
-    orchestrator = Orchestrator(mock_plugin_registry, vault, test_session_factory)
+async def test_app(test_session_factory, yaml_store, mock_plugin_registry, tmp_path):
+    from app.core.auth import create_access_token
+    orchestrator = Orchestrator(mock_plugin_registry, yaml_store, test_session_factory)
+
+    token = create_access_token()
 
     app = FastAPI()
-    app.state.vault = vault
+    app.state.yaml_store = yaml_store
     app.state.plugin_registry = mock_plugin_registry
     app.state.orchestrator = orchestrator
+    app.state.scheduler = type("obj", (), {"remove_credential": lambda s, x: None, "register": lambda s, *a: None})()
     app.state.is_unlocked = True
-
-    async def _vault_locked_handler(request: Request, exc: VaultLockedError) -> JSONResponse:
-        return JSONResponse(status_code=403, content={"detail": "vault locked"})
-
-    app.add_exception_handler(VaultLockedError, _vault_locked_handler)
 
     from app.routers import credentials as cred_router
     from app.routers import sign as sign_router
@@ -111,4 +107,5 @@ async def test_app(test_session_factory, vault, mock_plugin_registry):
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        client.headers["Authorization"] = f"Bearer {token}"
         yield client

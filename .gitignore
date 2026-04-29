@@ -33,6 +33,9 @@ logs/*.log
 .DS_Store
 Thumbs.db
 
+# Sensitive credentials
+login_data.json
+
 # User plugins (third-party)
 user_plugins/*/
 !user_plugins/.gitkeep

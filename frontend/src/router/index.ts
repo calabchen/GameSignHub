@@ -9,19 +9,9 @@ const router = createRouter({
       component: () => import('@/views/Unlock.vue'),
     },
     {
-      path: '/dashboard',
-      name: 'dashboard',
-      component: () => import('@/views/Dashboard.vue'),
-    },
-    {
-      path: '/credentials',
-      name: 'credentials',
-      component: () => import('@/views/Credentials.vue'),
-    },
-    {
-      path: '/logs',
-      name: 'logs',
-      component: () => import('@/views/Logs.vue'),
+      path: '/app',
+      name: 'app',
+      component: () => import('@/views/AppView.vue'),
     },
   ],
 })

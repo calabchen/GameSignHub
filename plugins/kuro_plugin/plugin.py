@@ -69,16 +69,21 @@ class KuroPlugin(BaseGamePlugin):
         else:
             return [SignInResult(game_id, "failed", "", f"未知游戏: {game_id}")]
 
-        # 鸣潮优先用已提供的 roleId
-        role_id = cred.get_role_id(game_id)
-        if role_id:
-            r = await game.sign_in(role_id=role_id, user_id=user_id)
-            return [SignInResult(
-                game_id=game_id,
-                status=r["status"],
-                reward=r["reward"],
-                message=r["message"],
-            )]
+        # 优先用 YAML 中预配置的角色 ID
+        role_ids = cred.get_role_ids(game_id)
+        if role_ids:
+            results = []
+            for rid in role_ids:
+                r = await game.sign_in(role_id=rid, user_id=user_id)
+                results.append(SignInResult(
+                    game_id=game_id,
+                    status=r["status"],
+                    reward=r["reward"],
+                    message=r["message"],
+                ))
+                if len(role_ids) > 1:
+                    await asyncio.sleep(random.uniform(0.5, 1.5))
+            return results
 
         # 从 API 获取角色列表
         try:

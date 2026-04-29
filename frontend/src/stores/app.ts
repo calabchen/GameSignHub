@@ -32,6 +32,7 @@ export const useAppStore = defineStore('app', () => {
     try {
       const res = await api.post('/api/unlock', { password })
       token.value = res.data.token
+      localStorage.setItem('token', res.data.token)
       isUnlocked.value = true
       await checkStatus()
       return { ok: true, firstTime: res.data.is_first_time }
@@ -44,6 +45,7 @@ export const useAppStore = defineStore('app', () => {
   async function lock() {
     await api.post('/api/lock')
     token.value = ''
+    localStorage.removeItem('token')
     isUnlocked.value = false
   }
 

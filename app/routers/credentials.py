@@ -1,110 +1,160 @@
 ﻿"""游戏账户管理 API：增删改查与校验。"""
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.core.vault import Vault, VaultLockedError
-from app.schemas.credential import (
-    CredentialCreate,
-    CredentialSummary,
-    CredentialUpdate,
-    ValidateResult,
-)
+from app.core.auth import verify_access_token
+from app.core.yaml_store import YamlStore
+from app.schemas.credential import CredentialScheduleUpdate, CredentialSummary, ValidateResult
+from app.schemas.credential import BaseModel
 
 router = APIRouter(prefix="/api/credentials", tags=["credentials"])
+security = HTTPBearer()
 
 
-def _get_vault(request: Request) -> Vault:
-    vault: Vault = request.app.state.vault
-    if not vault.is_unlocked:
-        raise VaultLockedError()
-    return vault
+class CredentialCreateRequest(BaseModel):
+    plugin_id: str = "kuro"
+    user_id: str = ""
+    token: str = ""
+    devcode: str = ""
+    distinct_id: str = ""
+    is_enabled: bool = True
+    wuwa_role_id: str = ""
+    pgr_role_id: str = ""
+
+
+class CredentialUpdateRequest(BaseModel):
+    user_id: str | None = None
+    token: str | None = None
+    devcode: str | None = None
+    distinct_id: str | None = None
+    is_enabled: bool | None = None
+    wuwa_role_id: str | None = None
+    pgr_role_id: str | None = None
+
+
+def _get_store(request: Request) -> YamlStore:
+    return request.app.state.yaml_store
+
+
+def _require_auth(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        verify_access_token(credentials.credentials)
+    except Exception:
+        raise HTTPException(status_code=401, detail="未授权")
+    if not request.app.state.is_unlocked:
+        raise HTTPException(status_code=403, detail="请先解锁")
 
 
 @router.get("", response_model=list[CredentialSummary])
-async def list_credentials(request: Request):
-    """获取游戏账户列表，在屏保已解锁时返回账户摘要。"""
-    vault = _get_vault(request)
-    return vault.list_summaries()
+async def list_credentials(request: Request, _=Depends(_require_auth)):
+    return _get_store(request).list_all()
 
 
 @router.post("", response_model=CredentialSummary)
-async def create_credential(request: Request, body: CredentialCreate):
-    """创建游戏账户，在提供社区 ID 与账户信息时保存记录。"""
-    vault = _get_vault(request)
-
+async def create_credential(request: Request, body: CredentialCreateRequest, _=Depends(_require_auth)):
+    store = _get_store(request)
     data = {
-        "display_name": body.display_name,
-        "credentials": body.credentials,
-        "enabled_games": body.enabled_games,
-        "is_enabled": body.is_enabled,
+        "enable": body.is_enabled,
+        "user_id": body.user_id,
+        "token": body.token,
+        "devcode": body.devcode,
+        "distinct_id": body.distinct_id,
+        "wuwa": {"role_id": body.wuwa_role_id, "enabled": True, "schedule_cron": "", "schedule_enabled": False},
+        "pgr": {"role_id": body.pgr_role_id, "enabled": False, "schedule_cron": "", "schedule_enabled": False},
     }
-    cred_id = await vault.save_credential(body.plugin_id, data)
-
-    creds = vault.get_credentials(body.plugin_id)
-    for c in creds:
-        if c["id"] == cred_id:
-            return CredentialSummary(
-                id=c["id"],
-                plugin_id=body.plugin_id,
-                display_name=c["display_name"],
-                enabled_games=c.get("enabled_games", []),
-                is_enabled=c.get("is_enabled", True),
-            )
-    raise HTTPException(status_code=500, detail="Failed to create")
+    cred_id = store.save(body.plugin_id, data)
+    return CredentialSummary(id=cred_id, plugin_id=body.plugin_id, user_id=body.user_id, is_enabled=body.is_enabled)
 
 
 @router.put("/{credential_id}", response_model=CredentialSummary)
-async def update_credential(request: Request, credential_id: int, body: CredentialUpdate):
-    """更新游戏账户，在账户 ID 存在时覆盖可变字段。"""
-    vault = _get_vault(request)
+async def update_credential(request: Request, credential_id: int, body: CredentialUpdateRequest, _=Depends(_require_auth)):
+    store = _get_store(request)
+    for a in store.list_all():
+        if a["id"] == credential_id:
+            existing = store.get(a["plugin_id"], credential_id)
+            if existing is None:
+                raise HTTPException(status_code=404, detail="Credential not found")
+            if body.user_id is not None:
+                existing["user_id"] = body.user_id
+            if body.token is not None:
+                existing["token"] = body.token
+            if body.devcode is not None:
+                existing["devcode"] = body.devcode
+            if body.distinct_id is not None:
+                existing["distinct_id"] = body.distinct_id
+            if body.is_enabled is not None:
+                existing["enable"] = body.is_enabled
+            if body.wuwa_role_id is not None:
+                existing.setdefault("wuwa", {})["role_id"] = body.wuwa_role_id
+            if body.pgr_role_id is not None:
+                existing.setdefault("pgr", {})["role_id"] = body.pgr_role_id
+            store.save(a["plugin_id"], existing, credential_id)
+            return CredentialSummary(
+                id=credential_id, plugin_id=a["plugin_id"],
+                user_id=existing.get("user_id", ""),
+                is_enabled=existing.get("enable", True),
+            )
+    raise HTTPException(status_code=404, detail="Credential not found")
 
-    for plugin_id, creds in vault.get_all_credentials().items():
-        for c in creds:
-            if c["id"] == credential_id:
-                if body.display_name is not None:
-                    c["display_name"] = body.display_name
-                if body.credentials is not None:
-                    c["credentials"] = body.credentials
-                if body.enabled_games is not None:
-                    c["enabled_games"] = body.enabled_games
-                if body.is_enabled is not None:
-                    c["is_enabled"] = body.is_enabled
-                await vault.save_credential(plugin_id, c)
-                return CredentialSummary(
-                    id=c["id"],
-                    plugin_id=plugin_id,
-                    display_name=c["display_name"],
-                    enabled_games=c.get("enabled_games", []),
-                    is_enabled=c.get("is_enabled", True),
-                )
 
+@router.get("/{credential_id}/detail")
+async def get_credential_detail(request: Request, credential_id: int, _=Depends(_require_auth)):
+    store = _get_store(request)
+    for a in store.list_all():
+        if a["id"] == credential_id:
+            return store.get(a["plugin_id"], credential_id)
     raise HTTPException(status_code=404, detail="Credential not found")
 
 
 @router.delete("/{credential_id}")
-async def delete_credential(request: Request, credential_id: int):
-    """删除游戏账户，在账户 ID 存在时移除该记录。"""
-    vault = _get_vault(request)
-    await vault.delete_credential(credential_id)
-    return {"message": "deleted"}
+async def delete_credential(request: Request, credential_id: int, _=Depends(_require_auth)):
+    store = _get_store(request)
+    scheduler = request.app.state.scheduler
+    for a in store.list_all():
+        if a["id"] == credential_id:
+            store.delete(a["plugin_id"], credential_id)
+            scheduler.remove_credential(credential_id)
+            return {"message": "deleted"}
+    raise HTTPException(status_code=404, detail="Credential not found")
 
 
 @router.post("/{credential_id}/validate", response_model=ValidateResult)
-async def validate_credential(request: Request, credential_id: int):
-    """校验游戏账户，在对应游戏社区可访问时返回有效性。"""
-    vault = _get_vault(request)
+async def validate_credential(request: Request, credential_id: int, _=Depends(_require_auth)):
+    store = _get_store(request)
+    for a in store.list_all():
+        if a["id"] == credential_id:
+            data = store.get(a["plugin_id"], credential_id)
+            plugin = request.app.state.plugin_registry.get(a["plugin_id"])
+            if plugin is None:
+                return ValidateResult(valid=False, message=f"未知插件: {a['plugin_id']}")
+            try:
+                valid = await plugin.validate_credentials(data)
+                return ValidateResult(valid=valid, message="有效" if valid else "无效")
+            except Exception as e:
+                return ValidateResult(valid=False, message=str(e))
+    raise HTTPException(status_code=404, detail="Credential not found")
 
-    for creds in vault.get_all_credentials().values():
-        for c in creds:
-            if c["id"] == credential_id:
-                plugin_id = c.get("plugin_id", "")
-                plugin = request.app.state.plugin_registry.get(plugin_id)
-                if plugin is None:
-                    return ValidateResult(valid=False, message=f"未知插件: {plugin_id}")
-                try:
-                    valid = await plugin.validate_credentials(c)
-                    return ValidateResult(valid=valid, message="有效" if valid else "无效")
-                except Exception as e:
-                    return ValidateResult(valid=False, message=str(e))
 
+@router.get("/{credential_id}/schedule/{game_id}", response_model=CredentialScheduleUpdate)
+async def get_credential_schedule(request: Request, credential_id: int, game_id: str, _=Depends(_require_auth)):
+    store = _get_store(request)
+    for a in store.list_all():
+        if a["id"] == credential_id:
+            data = store.get(a["plugin_id"], credential_id)
+            g = (data or {}).get(game_id, {}) or {}
+            return CredentialScheduleUpdate(cron=g.get("schedule_cron", ""), enabled=g.get("schedule_enabled", False))
+    raise HTTPException(status_code=404, detail="Credential not found")
+
+
+@router.put("/{credential_id}/schedule/{game_id}", response_model=CredentialScheduleUpdate)
+async def update_credential_schedule(request: Request, credential_id: int, game_id: str, body: CredentialScheduleUpdate, _=Depends(_require_auth)):
+    store = _get_store(request)
+    scheduler = request.app.state.scheduler
+    for a in store.list_all():
+        if a["id"] == credential_id:
+            cron = body.cron if body.enabled else ""
+            store.update_schedule(a["plugin_id"], credential_id, game_id, body.cron, body.enabled)
+            scheduler.register(credential_id, a["plugin_id"], game_id, cron)
+            return body
     raise HTTPException(status_code=404, detail="Credential not found")

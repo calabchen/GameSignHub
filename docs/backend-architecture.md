@@ -1,4 +1,4 @@
-﻿# GameSignHub 鍚庣鏋舵瀯瑙勫垝
+# GameSignHub 鍚庣鏋舵瀯瑙勫垝
 
 > 鐗堟湰: v1.0
 > 璁稿彲璇? GPL-3.0
