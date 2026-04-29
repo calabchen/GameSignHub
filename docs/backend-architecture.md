@@ -528,20 +528,25 @@ Phase 2 (安全层)
   验证: POST /api/unlock 成功拿到 JWT
 
 Phase 3 (签到能力)
-  mhy_plugin 内容实现 + schemas/credential.py + schemas/sign.py
+  kuro_plugin 内容实现 + schemas/credential.py + schemas/sign.py
   → orchestrator.py → routers/credentials.py + routers/sign.py
   → models/sign_log.py + schemas/log.py + routers/logs.py
-  验证: 添加 Cookie → 签到 → 返回结果 → 写入日志
+  验证: 添加 Token → 签到鸣潮/战双 → 返回结果 → 写入日志
 
-Phase 4 (完整功能)
-  kuro_plugin 内容实现
-  → push.py + routers/push_config.py
-  → scheduler.py + routers/schedule.py
-  验证: 定时任务执行、推送通知
+Phase 4 (定时任务)
+  scheduler.py → routers/schedule.py
+  → 持久化 cron 配置 → APScheduler 自动签到
+  验证: 设置 cron 表达式 → 定时触发签到
 
 Phase 5 (优化)
   WebSocket 日志广播
   Dockerfile + docker-compose.yml
+  Vue 3 前端对接
+
+Phase 6 (米游社)
+  mhy_plugin 内容实现
+  → push.py + routers/push_config.py
+  验证: 添加 Cookie → 签到原神等6游戏 → 推送通知
   Vue 3 前端对接
 ```
 

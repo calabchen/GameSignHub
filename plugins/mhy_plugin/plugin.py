@@ -1,4 +1,4 @@
-"""米游社插件 — 米哈游旗下游戏签到.
+"""米游社插件 — 米哈游旗下社区签到.
 
 支持游戏:
   - 原神 (genshin)
@@ -21,15 +21,39 @@ class MhyPlugin(BaseGamePlugin):
             id="mhy",
             name="米游社",
             version="0.1.0",
-            description="米哈游旗下游戏社区签到：原神、星穹铁道、绝区零、崩坏3、崩坏2、未定事件簿",
+            description="米哈游旗下游戏社区签到",
             homepage="https://github.com/Womsxd/MihoyoBBSTools",
             supported_games=[
-                GameInfo(id="genshin", name="原神", has_forum=True),
-                GameInfo(id="honkai_sr", name="崩坏星穹铁道", has_forum=True),
-                GameInfo(id="zzz", name="绝区零", has_forum=True),
-                GameInfo(id="honkai3rd", name="崩坏3", has_forum=True),
-                GameInfo(id="honkai2", name="崩坏2", has_forum=True),
-                GameInfo(id="tears_of_themis", name="未定事件簿", has_forum=True),
+                GameInfo(
+                    id="genshin", name="原神", has_forum=True, icon="/icons/genshin.png"
+                ),
+                GameInfo(
+                    id="honkai_sr",
+                    name="崩坏星穹铁道",
+                    has_forum=True,
+                    icon="/icons/honkai_sr.png",
+                ),
+                GameInfo(
+                    id="zzz", name="绝区零", has_forum=True, icon="/icons/zzz.png"
+                ),
+                GameInfo(
+                    id="honkai3rd",
+                    name="崩坏3",
+                    has_forum=True,
+                    icon="/icons/honkai3rd.png",
+                ),
+                GameInfo(
+                    id="honkai2",
+                    name="崩坏学园2",
+                    has_forum=True,
+                    icon="/icons/honkai2.png",
+                ),
+                GameInfo(
+                    id="tears_of_themis",
+                    name="未定事件簿",
+                    has_forum=True,
+                    icon="/icons/tears_of_themis.png",
+                ),
             ],
         )
 

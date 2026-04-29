@@ -109,8 +109,8 @@ class Vault:
             for cred in creds:
                 result.append({
                     "id": cred["id"],
-                    "plugin_id": cred["plugin_id"],
-                    "display_name": cred["display_name"],
+                    "plugin_id": plugin_id,
+                    "display_name": cred.get("display_name", ""),
                     "enabled_games": cred.get("enabled_games", []),
                     "is_enabled": cred.get("is_enabled", True),
                 })
@@ -163,6 +163,7 @@ class Vault:
 
         # 更新内存缓存
         credential_data["id"] = new_id
+        credential_data["plugin_id"] = plugin_id
         self._cache.setdefault(plugin_id, []).append(credential_data)
 
         return new_id
@@ -224,6 +225,7 @@ class Vault:
                 plaintext = enc.decrypt(row.encrypted_data)
                 data = json.loads(plaintext)
                 data["id"] = row.id
+                data["plugin_id"] = row.plugin_id
                 data["display_name"] = row.display_name
                 data["enabled_games"] = row.enabled_games
                 data["is_enabled"] = row.is_enabled

@@ -21,7 +21,7 @@ async def list_plugins(request: Request) -> list[dict]:
             "description": info.description,
             "homepage": info.homepage,
             "supported_games": [
-                {"id": g.id, "name": g.name, "has_forum": g.has_forum}
+                {"id": g.id, "name": g.name, "has_forum": g.has_forum, "icon": g.icon}
                 for g in info.supported_games
             ],
         })
@@ -46,7 +46,7 @@ async def get_plugin(request: Request, plugin_id: str) -> dict:
         "description": info.description,
         "homepage": info.homepage,
         "supported_games": [
-            {"id": g.id, "name": g.name, "has_forum": g.has_forum}
+            {"id": g.id, "name": g.name, "has_forum": g.has_forum, "icon": g.icon, "icon_url": g.icon_url}
             for g in info.supported_games
         ],
     }

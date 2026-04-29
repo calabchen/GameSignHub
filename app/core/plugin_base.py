@@ -8,6 +8,7 @@ class GameInfo(NamedTuple):
     id: str             # 游戏标识，如 "genshin"
     name: str           # 显示名称，如 "原神"
     has_forum: bool     # 是否有论坛任务
+    icon: str = ""      # 游戏图标路径 (e.g. "/icons/genshin.png")
 
 
 class PluginInfo(NamedTuple):
