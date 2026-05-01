@@ -30,7 +30,7 @@ async function handleUnlock() {
 
 <template>
   <div style="display:flex;align-items:center;justify-content:center;height:100%;background:#f5f7fa">
-    <el-card style="width:420px">
+    <el-card style="width:90%;max-width:420px">
       <template #header>
         <div style="text-align:center">
           <h2 style="margin:0;color:#303133">游戏签到中心</h2>

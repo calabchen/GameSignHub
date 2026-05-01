@@ -2,12 +2,12 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import {
   fetchPlugins, fetchCredentials, createCredential, updateCredential, deleteCredential,
-  validateCredential, signCredential, signAll,
+  signCredential,
   fetchCredentialSchedule, updateCredentialSchedule, fetchCredentialDetail,
-  fetchLogs, fetchTodaySummary, clearLogs,
+  fetchLogs,
 } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, VideoPlay, Timer, Delete } from '@element-plus/icons-vue'
+import { Plus, Timer, CopyDocument } from '@element-plus/icons-vue'
 
 const plugins = ref<any[]>([])
 const allAccounts = ref<any[]>([])
@@ -35,10 +35,12 @@ const pagedAccounts = computed(() => {
 
 const scheduleDialog = ref(false)
 const scheduleCredId = ref<number | null>(null)
+const schedulePlugin = ref('')
 const scheduleGames = reactive({
   wuwa: { cron: '', enabled: false },
   pgr: { cron: '', enabled: false },
 })
+const signingGame = ref<string | null>(null)
 
 const schedulePresets = [
   { label: '每天 07:00', value: '0 7 * * *' },
@@ -54,11 +56,10 @@ const logPage = ref(1)
 const logPageSize = ref(100)
 const logFilterStatus = ref('')
 const logFilterPlugin = ref('')
-const logFilterDateRange = ref<[string, string] | null>(null)
-const todaySummary = ref({ total: 0, success: 0, already: 0, failed: 0 })
+const logFilterDateFrom = ref('')
+const logFilterDateTo = ref('')
 const logContainer = ref<HTMLDivElement>()
 
-const logLevels = ['debug', 'info', 'warn', 'error'] as const
 const terminalLog = ref<{ time: string; plugin: string; game: string; account: string; elapsed: string; status: string; msg: string }[]>([])
 
 onMounted(async () => {
@@ -68,25 +69,18 @@ onMounted(async () => {
   refreshLogs()
 })
 
-watch([logPage, logFilterStatus, logFilterPlugin, logFilterDateRange], refreshLogs)
+watch([logPage, logFilterStatus, logFilterPlugin, logFilterDateFrom, logFilterDateTo], refreshLogs)
 watch(terminalLog, async () => { await nextTick(); if (logContainer.value) logContainer.value.scrollTop = logContainer.value.scrollHeight }, { deep: true })
 
 async function refreshLogs() {
   try {
-    const [logRes, todayRes] = await Promise.all([
-      (async () => {
-        const params: any = { page: logPage.value, page_size: logPageSize.value }
-        if (logFilterStatus.value) params.status = logFilterStatus.value
-        if (logFilterPlugin.value) params.plugin_id = logFilterPlugin.value
-        if (logFilterDateRange.value) {
-          params.date_from = logFilterDateRange.value[0]
-          params.date_to = logFilterDateRange.value[1]
-        }
-        return fetchLogs(params)
-      })(),
-      fetchTodaySummary(),
-    ])
-    logs.value = logRes.items; logTotal.value = logRes.total; todaySummary.value = todayRes
+    const params: any = { page: logPage.value, page_size: logPageSize.value }
+    if (logFilterStatus.value) params.status = logFilterStatus.value
+    if (logFilterPlugin.value) params.plugin_id = logFilterPlugin.value
+    if (logFilterDateFrom.value) params.date_from = logFilterDateFrom.value
+    if (logFilterDateTo.value) params.date_to = logFilterDateTo.value
+    const logRes = await fetchLogs(params)
+    logs.value = logRes.items; logTotal.value = logRes.total
     terminalLog.value = logRes.items.map((r: any) => ({
       time: r.signed_at?.slice(5, 16)?.replace('T', ' ') || '',
       plugin: r.plugin_id || '',
@@ -101,13 +95,6 @@ async function refreshLogs() {
 
 function pluginName(id: string) { return plugins.value.find((p: any) => p.id === id)?.name || id }
 
-function statusTag(s: string) {
-  if (s === 'success') return 'success'
-  if (s === 'already') return 'info'
-  if (s === 'failed') return 'danger'
-  return ''
-}
-
 function statusColor(s: string) {
   if (s === 'success') return '#67c23a'
   if (s === 'already') return '#909399'
@@ -121,24 +108,21 @@ function formatElapsed(sec: number): string {
   return `${sec.toFixed(1)}s`
 }
 
-function cronLabel(cron: string) {
-  if (!cron) return '—'
-  const m: Record<string, string> = {
-    '0 7 * * *': '每天 07:00', '0 8 * * *': '每天 08:00',
-    '0 12 * * *': '每天 12:00', '0 18 * * *': '每天 18:00', '0 22 * * *': '每天 22:00',
-  }
-  return m[cron] || cron
+function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text)
+  ElMessage.success('已复制')
 }
 
-async function handleSign(account: any) {
-  signLoading.value = account.id
-  try {
-    await signCredential(account.plugin_id, account.id, 'wuwa')
-    ElMessage.success('签到完成')
-    await refreshLogs()
-  } catch (e: any) {
-    ElMessage.error(e.response?.data?.detail || '签到失败')
-  } finally { signLoading.value = null }
+function roleOptions(account: any) {
+  const opts: { label: string; value: string }[] = []
+  if (account.wuwa_role_id) opts.push({ label: '鸣潮', value: account.wuwa_role_id })
+  if (account.pgr_role_id) opts.push({ label: '战双', value: account.pgr_role_id })
+  return opts
+}
+
+function roleSelectModel(account: any) {
+  const opts = roleOptions(account)
+  return opts.length > 0 ? opts[0].value : ''
 }
 
 function kuroFieldsFromDetail(detail: any) {
@@ -202,16 +186,9 @@ async function handleDelete(account: any) {
   } catch {}
 }
 
-async function handleValidate(account: any) {
-  try {
-    const res = await validateCredential(account.id)
-    if (res.valid) ElMessage.success('账户有效')
-    else ElMessage.warning('无效: ' + res.message)
-  } catch (e: any) { ElMessage.error(e.response?.data?.detail || '验证失败') }
-}
-
-async function openSchedule(account: any) {
+async function openSignSchedule(account: any) {
   scheduleCredId.value = account.id
+  schedulePlugin.value = account.plugin_id
   scheduleGames.wuwa = { cron: '', enabled: false }; scheduleGames.pgr = { cron: '', enabled: false }
   try {
     const [w, p] = await Promise.all([
@@ -222,6 +199,18 @@ async function openSchedule(account: any) {
     scheduleGames.pgr = { cron: p.cron || '', enabled: p.enabled || false }
   } catch {}
   scheduleDialog.value = true
+}
+
+async function handleSignGame(game: string) {
+  if (scheduleCredId.value == null || !schedulePlugin.value) return
+  signingGame.value = game
+  try {
+    await signCredential(schedulePlugin.value, scheduleCredId.value, game)
+    ElMessage.success(`${game === 'wuwa' ? '鸣潮' : '战双'} 签到完成`)
+    await refreshLogs()
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.detail || '签到失败')
+  } finally { signingGame.value = null }
 }
 
 async function saveSchedule() {
@@ -236,173 +225,171 @@ async function saveSchedule() {
   } catch (e: any) { ElMessage.error(e.response?.data?.detail || '更新失败') }
 }
 
-async function handleClearLogs() {
-  try {
-    await ElMessageBox.confirm('确定清除所有签到日志？', '确认', { type: 'warning' })
-    const res = await clearLogs()
-    ElMessage.success(res.message)
-    await refreshLogs()
-  } catch {}
+function resetFilters() {
+  logFilterStatus.value = ''
+  logFilterPlugin.value = ''
+  logFilterDateFrom.value = ''
+  logFilterDateTo.value = ''
+  logPage.value = 1
 }
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;height:100%">
-    <div style="flex:1;min-height:0;display:flex;flex-direction:column">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">
-        <div style="display:flex;align-items:center;gap:12px">
-          <h2 style="margin:0;font-size:18px">账户管理</h2>
-          <span style="color:#909399;font-size:13px">{{ allAccounts.length }} 个账户</span>
-        </div>
-        <div style="display:flex;gap:8px">
-          <el-button type="primary" :icon="Plus" @click="openAdd">添加账户</el-button>
-        </div>
-      </div>
-      <div style="flex:1;min-height:0;overflow-y:auto">
-        <el-table :data="pagedAccounts" stripe empty-text="暂无数据" size="small">
-          <el-table-column label="社区" width="70">
-            <template #default="{ row }"><el-tag size="small" effect="dark">{{ pluginName(row.plugin_id) }}</el-tag></template>
-          </el-table-column>
-          <el-table-column label="User ID" min-width="120">
-            <template #default="{ row }">{{ row.user_id || '未设置' }}</template>
-          </el-table-column>
-          <el-table-column label="角色 ID" min-width="150">
-            <template #default="{ row }">
-              <span v-if="row.wuwa_role_id" style="margin-right:6px">鸣潮: {{ row.wuwa_role_id }}</span>
-              <span v-if="row.pgr_role_id">战双: {{ row.pgr_role_id }}</span>
-              <span v-if="!row.wuwa_role_id && !row.pgr_role_id" style="color:#c0c4cc">未设置</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="定时" width="70">
-            <template #default="{ row }">
-              <el-button size="small" text :icon="Timer" @click="openSchedule(row)">设置</el-button>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="240" fixed="right">
-            <template #default="{ row }">
-              <el-button size="small" type="primary" :loading="signLoading === row.id" @click="handleSign(row)">签到</el-button>
-              <el-button size="small" @click="handleValidate(row)">验证</el-button>
-              <el-button size="small" @click="openEdit(row)">编辑</el-button>
-              <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-      <el-pagination
-        v-if="allAccounts.length > 0"
-        v-model:current-page="accountPage"
-        v-model:page-size="accountPageSize"
-        :total="allAccounts.length"
-        layout="prev, pager, next, jumper"
-        background
-        size="small"
-        style="margin-top:8px;justify-content:center;flex-shrink:0"
-        @size-change="accountPage = 1"
-      />
-    </div>
+<div style="display:flex;flex-direction:column;height:100%">
 
-    <div style="height:1px;background:#e4e7ed;margin:8px 0;flex-shrink:0" />
-
-    <div style="flex:1;min-height:0;display:flex;flex-direction:column">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0">
-        <div style="display:flex;align-items:center;gap:6px">
-          <h3 style="margin:0;font-size:16px">签到日志</h3>
-          <span style="color:#909399;font-size:12px">共 {{ logTotal }} 条</span>
-        </div>
-        <div style="display:flex;gap:6px">
-          <el-select v-model="logFilterStatus" placeholder="状态" size="small" clearable style="width:90px">
-            <el-option label="全部" value="" /><el-option label="成功" value="success" />
-            <el-option label="已签到" value="already" /><el-option label="失败" value="failed" />
-          </el-select>
-          <el-select v-model="logFilterPlugin" placeholder="社区" size="small" clearable style="width:90px">
-            <el-option label="全部" value="" />
-            <el-option v-for="p in plugins" :key="p.id" :label="p.name" :value="p.id" />
-          </el-select>
-          <el-date-picker v-model="logFilterDateRange" type="daterange" range-separator="~"
-            start-placeholder="开始" end-placeholder="结束" size="small" style="width:200px"
-            format="YYYY-MM-DD" value-format="YYYY-MM-DD" />
-          <el-button size="small" type="danger" :icon="Delete" @click="handleClearLogs">清除</el-button>
-        </div>
+  <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:12px">
+        <h2 style="margin:0;font-size:18px">账户管理</h2>
+        <span style="color:#909399;font-size:13px">{{ allAccounts.length }} 个账户</span>
       </div>
-
-      <div style="display:flex;gap:20px;margin-bottom:12px;flex-shrink:0">
-        <div style="font-size:16px;font-weight:600;color:#67c23a">成功: {{ todaySummary.success }}</div>
-        <div style="font-size:16px;font-weight:600;color:#909399">已签到: {{ todaySummary.already }}</div>
-        <div style="font-size:16px;font-weight:600;color:#f56c6c">失败: {{ todaySummary.failed }}</div>
-        <div style="font-size:16px;font-weight:600;color:#303133">合计: {{ todaySummary.total }}</div>
-      </div>
-
-      <div ref="logContainer" style="flex:1;min-height:0;overflow-y:auto;background:#1e1e1e;border-radius:6px;padding:12px 16px;font-family:'Courier New',monospace;font-size:14px;line-height:1.8">
-        <div v-for="(l, i) in terminalLog" :key="i" style="white-space:nowrap">
-          <span style="color:#569cd6">[{{ l.time }}]</span>
-          <span style="color:#4ec9b0;margin-left:6px">{{ l.plugin }}</span>
-          <span style="color:#909399">|</span>
-          <span style="color:#ce9178">{{ l.game }}</span>
-          <span style="color:#909399">|</span>
-          <span style="color:#dcdcaa">{{ l.account }}</span>
-          <span style="color:#909399">|</span>
-          <span style="color:#6a9955">{{ l.elapsed }}</span>
-          <span style="color:#909399">|</span>
-          <span :style="{ color: statusColor(l.status) }">{{ l.status }}</span>
-          <span style="color:#909399"> | </span>
-          <span style="color:#c0c4cc">{{ l.msg }}</span>
-        </div>
-        <div v-if="terminalLog.length === 0" style="color:#6a9955">暂无签到记录</div>
+      <div style="display:flex;gap:8px">
+        <el-button type="primary" :icon="Plus" @click="openAdd">添加账户</el-button>
       </div>
     </div>
-
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
-      <el-form label-width="80px">
-        <el-form-item label="社区">
-          <el-select v-model="form.plugin_id" style="width:100%">
-            <el-option v-for="p in plugins" :key="p.id" :label="p.name" :value="p.id" />
-          </el-select>
-        </el-form-item>
-        <template v-if="form.plugin_id === 'kuro'">
-          <el-form-item label="Token"><el-input v-model="kuroFields.token" placeholder="eyJhbGci..." /></el-form-item>
-          <el-form-item label="User ID"><el-input v-model="kuroFields.user_id" placeholder="15340540" /></el-form-item>
-          <el-form-item label="Device"><el-input v-model="kuroFields.devcode" placeholder="a167a07d-..." /></el-form-item>
-          <el-form-item label="设备指纹"><el-input v-model="kuroFields.distinct_id" placeholder="d5fafc6b-..." /></el-form-item>
-          <el-divider content-position="left">鸣潮</el-divider>
-          <el-form-item label="Role ID"><el-input v-model="kuroFields.wuwa.role_id" placeholder="110716118" /></el-form-item>
-          <el-divider content-position="left">战双</el-divider>
-          <el-form-item label="Role ID"><el-input v-model="kuroFields.pgr.role_id" placeholder="角色ID" /></el-form-item>
-        </template>
-        <el-form-item label="启用"><el-switch v-model="form.is_enabled" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSave">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="scheduleDialog" title="定时签到" width="400px">
-      <el-form label-width="60px">
-        <el-divider content-position="left">鸣潮</el-divider>
-        <el-form-item label="启用"><el-switch v-model="scheduleGames.wuwa.enabled" /></el-form-item>
-        <el-form-item label="时间">
-          <el-select v-model="scheduleGames.wuwa.cron" style="width:100%" :disabled="!scheduleGames.wuwa.enabled">
-            <el-option v-for="p in schedulePresets" :key="p.value" :label="p.label" :value="p.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="!schedulePresets.find(p => p.value === scheduleGames.wuwa.cron)" label="自定义">
-          <el-input v-model="scheduleGames.wuwa.cron" placeholder="0 7 * * *" :disabled="!scheduleGames.wuwa.enabled" />
-        </el-form-item>
-        <el-divider content-position="left">战双</el-divider>
-        <el-form-item label="启用"><el-switch v-model="scheduleGames.pgr.enabled" /></el-form-item>
-        <el-form-item label="时间">
-          <el-select v-model="scheduleGames.pgr.cron" style="width:100%" :disabled="!scheduleGames.pgr.enabled">
-            <el-option v-for="p in schedulePresets" :key="p.value" :label="p.label" :value="p.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="!schedulePresets.find(p => p.value === scheduleGames.pgr.cron)" label="自定义">
-          <el-input v-model="scheduleGames.pgr.cron" placeholder="0 7 * * *" :disabled="!scheduleGames.pgr.enabled" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="scheduleDialog = false">取消</el-button>
-        <el-button type="primary" @click="saveSchedule">保存</el-button>
-      </template>
-    </el-dialog>
+    <div style="flex:1;min-height:0;overflow-y:auto">
+      <el-table :data="pagedAccounts" stripe empty-text="暂无数据" size="small">
+        <el-table-column label="社区" width="60">
+          <template #default="{ row }"><el-tag size="small" effect="dark">{{ pluginName(row.plugin_id) }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="User ID" min-width="100">
+          <template #default="{ row }">
+            <span style="display:inline-flex;align-items:center;gap:4px">
+              <span>{{ row.user_id || '未设置' }}</span>
+              <el-button v-if="row.user_id" text size="small" :icon="CopyDocument" @click="copyToClipboard(row.user_id)" />
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="角色 ID" min-width="130">
+          <template #default="{ row }">
+            <span v-if="roleOptions(row).length > 0" style="display:inline-flex;align-items:center;gap:4px">
+              <el-select :model-value="roleSelectModel(row)" size="small" style="width:100px" disabled>
+                <el-option v-for="r in roleOptions(row)" :key="r.value" :label="r.label" :value="r.value" />
+              </el-select>
+              <el-button text size="small" :icon="CopyDocument" @click="copyToClipboard(roleSelectModel(row))" />
+            </span>
+            <span v-else style="color:#c0c4cc">未设置</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" min-width="150" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" text :icon="Timer" @click="openSignSchedule(row)">签到&定时</el-button>
+            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+    <el-pagination
+      v-if="allAccounts.length > 0"
+      v-model:current-page="accountPage"
+      v-model:page-size="accountPageSize"
+      :total="allAccounts.length"
+      layout="prev, pager, next, jumper"
+      background
+      size="small"
+      style="margin-top:8px;justify-content:center;flex-shrink:0"
+      @size-change="accountPage = 1"
+    />
   </div>
+
+  <div style="height:1px;background:#e4e7ed;margin:8px 0;flex-shrink:0"></div>
+
+  <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+    <div style="flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <h3 style="margin:0;font-size:16px">签到日志</h3>
+        <span style="color:#909399;font-size:12px">共 {{ logTotal }} 条</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+        <el-select v-model="logFilterStatus" placeholder="状态" size="small" clearable style="flex:1;min-width:100px">
+          <el-option label="全部" value="" /><el-option label="成功" value="success" />
+          <el-option label="已签到" value="already" /><el-option label="失败" value="failed" />
+        </el-select>
+        <el-select v-model="logFilterPlugin" placeholder="社区" size="small" clearable style="flex:1;min-width:100px">
+          <el-option label="全部" value="" />
+          <el-option v-for="p in plugins" :key="p.id" :label="p.name" :value="p.id" />
+        </el-select>
+        <el-date-picker v-model="logFilterDateFrom" type="date" placeholder="开始日期" size="small"
+          style="flex:1;min-width:110px" format="YYYY-MM-DD" value-format="YYYY-MM-DD" />
+        <el-date-picker v-model="logFilterDateTo" type="date" placeholder="结束日期" size="small"
+          style="flex:1;min-width:110px" format="YYYY-MM-DD" value-format="YYYY-MM-DD" />
+        <el-button size="small" style="flex-shrink:0" @click="resetFilters">重置</el-button>
+      </div>
+    </div>
+    <div ref="logContainer" style="flex:1;min-height:0;overflow-y:auto;background:#1e1e1e;border-radius:6px;padding:12px 16px;font-family:'Courier New',monospace;font-size:14px;line-height:1.8">
+      <div v-for="(l, i) in terminalLog" :key="i" style="white-space:pre-wrap;word-break:break-all">
+        <span style="color:#569cd6">[{{ l.time }}]</span>
+        <span style="color:#4ec9b0;margin-left:6px">{{ l.plugin }}</span>
+        <span style="color:#909399">|</span>
+        <span style="color:#ce9178">{{ l.game }}</span>
+        <span style="color:#909399">|</span>
+        <span style="color:#dcdcaa">{{ l.account }}</span>
+        <span style="color:#909399">|</span>
+        <span style="color:#6a9955">{{ l.elapsed }}</span>
+        <span style="color:#909399">|</span>
+        <span :style="{ color: statusColor(l.status) }">{{ l.status }}</span>
+        <span style="color:#909399"> | </span>
+        <span style="color:#c0c4cc">{{ l.msg }}</span>
+      </div>
+      <div v-if="terminalLog.length === 0" style="color:#6a9955">暂无签到记录</div>
+    </div>
+  </div>
+
+  <el-dialog v-model="dialogVisible" :title="dialogTitle" width="90%" style="max-width:500px">
+    <el-form label-width="65px">
+      <el-form-item label="社区">
+        <el-select v-model="form.plugin_id" style="width:100%">
+          <el-option v-for="p in plugins" :key="p.id" :label="p.name" :value="p.id" />
+        </el-select>
+      </el-form-item>
+      <template v-if="form.plugin_id === 'kuro'">
+        <el-form-item label="Token"><el-input v-model="kuroFields.token" placeholder="eyJhbGci..." /></el-form-item>
+        <el-form-item label="User ID"><el-input v-model="kuroFields.user_id" placeholder="15340540" /></el-form-item>
+        <el-form-item label="Device"><el-input v-model="kuroFields.devcode" placeholder="a167a07d-..." /></el-form-item>
+        <el-form-item label="设备指纹"><el-input v-model="kuroFields.distinct_id" placeholder="d5fafc6b-..." /></el-form-item>
+        <el-divider content-position="left">鸣潮</el-divider>
+        <el-form-item label="Role ID"><el-input v-model="kuroFields.wuwa.role_id" placeholder="110716118" /></el-form-item>
+        <el-divider content-position="left">战双</el-divider>
+        <el-form-item label="Role ID"><el-input v-model="kuroFields.pgr.role_id" placeholder="角色ID" /></el-form-item>
+      </template>
+      <el-form-item label="启用"><el-switch v-model="form.is_enabled" /></el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="dialogVisible = false">取消</el-button>
+      <el-button type="primary" @click="handleSave">保存</el-button>
+    </template>
+  </el-dialog>
+
+  <el-dialog v-model="scheduleDialog" title="签到 & 定时" width="90%" style="max-width:420px">
+    <div style="margin-bottom:16px">
+      <div style="font-weight:600;margin-bottom:8px;color:#303133">鸣潮</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <el-button size="small" type="primary" :loading="signingGame === 'wuwa'" @click="handleSignGame('wuwa')">立即签到鸣潮</el-button>
+        <el-switch v-model="scheduleGames.wuwa.enabled" />
+        <el-select v-model="scheduleGames.wuwa.cron" size="small" style="flex:1;min-width:0" :disabled="!scheduleGames.wuwa.enabled">
+          <el-option v-for="p in schedulePresets" :key="p.value" :label="p.label" :value="p.value" />
+        </el-select>
+      </div>
+      <el-input v-if="!schedulePresets.find(p => p.value === scheduleGames.wuwa.cron)" v-model="scheduleGames.wuwa.cron" placeholder="0 7 * * *" size="small" :disabled="!scheduleGames.wuwa.enabled" />
+    </div>
+    <el-divider />
+    <div style="margin-bottom:16px">
+      <div style="font-weight:600;margin-bottom:8px;color:#303133">战双</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <el-button size="small" type="primary" :loading="signingGame === 'pgr'" @click="handleSignGame('pgr')">立即签到战双</el-button>
+        <el-switch v-model="scheduleGames.pgr.enabled" />
+        <el-select v-model="scheduleGames.pgr.cron" size="small" style="flex:1;min-width:0" :disabled="!scheduleGames.pgr.enabled">
+          <el-option v-for="p in schedulePresets" :key="p.value" :label="p.label" :value="p.value" />
+        </el-select>
+      </div>
+      <el-input v-if="!schedulePresets.find(p => p.value === scheduleGames.pgr.cron)" v-model="scheduleGames.pgr.cron" placeholder="0 7 * * *" size="small" :disabled="!scheduleGames.pgr.enabled" />
+    </div>
+    <template #footer>
+      <el-button @click="scheduleDialog = false">关闭</el-button>
+      <el-button type="primary" @click="saveSchedule">保存定时</el-button>
+    </template>
+  </el-dialog>
+
+</div>
 </template>

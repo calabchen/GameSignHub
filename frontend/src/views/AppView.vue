@@ -38,9 +38,7 @@ async function handleLock() {
     <el-header style="height:48px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e4e7ed;padding:0 16px;flex-shrink:0">
       <span style="font-size:16px;font-weight:600;color:#303133">游戏签到中心</span>
       <div style="display:flex;align-items:center;gap:8px">
-        <span style="color:#909399;font-size:13px">admin</span>
-        <el-button text size="small" type="primary" @click="pwdDialog = true">改密</el-button>
-        <el-button text size="small" @click="handleLock">锁定</el-button>
+        <el-button size="small" @click="handleLock">锁定</el-button>
       </div>
     </el-header>
 
@@ -68,7 +66,7 @@ async function handleLock() {
     </el-main>
 
     <el-footer style="height:auto;padding:0;border-top:1px solid #e4e7ed;flex-shrink:0">
-      <div style="display:flex">
+      <div style="display:flex;padding-bottom:env(safe-area-inset-bottom,0px)">
         <div
           v-for="tab in [
             { key: 'accounts', label: '账户管理', icon: User },
@@ -81,7 +79,7 @@ async function handleLock() {
           :style="{ color: activeTab === tab.key ? '#409eff' : '#909399' }"
         >
           <el-icon :size="20"><component :is="tab.icon" /></el-icon>
-          <span style="font-size:11px;margin-top:2px">{{ tab.label }}</span>
+          <span style="font-size:12px;margin-top:2px">{{ tab.label }}</span>
         </div>
       </div>
     </el-footer>
