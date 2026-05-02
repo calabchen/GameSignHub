@@ -1,29 +1,63 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import { api } from '@/api'
-import { ElMessage } from 'element-plus'
-import { Lock, User, Monitor } from '@element-plus/icons-vue'
-import DashboardView from '@/views/Dashboard.vue'
-import CredentialsView from '@/views/Credentials.vue'
+import { fetchPlugins } from '@/api'
+import { pinyinSort, getInitial, ALPHABET } from '@/utils/pinyin'
+import { gameColor, gameGradient } from '@/utils/color'
+import AccountTable from '@/components/AccountTable.vue'
+import LogTerminal from '@/components/LogTerminal.vue'
+import WelcomePage from '@/components/WelcomePage.vue'
+import ChangePasswordForm from '@/components/ChangePasswordForm.vue'
 
 const router = useRouter()
 const store = useAppStore()
-const activeTab = ref('dashboard')
+const logRef = ref<InstanceType<typeof LogTerminal> | null>(null)
+const highlightLetter = ref('')
 
-const pwdDialog = ref(false)
-const pwdForm = reactive({ old: '', new1: '', new2: '' })
+const treeData = computed(() => {
+  return pinyinSort(store.plugins, p => p.name).map(plugin => ({
+    id: `plugin-${plugin.id}`,
+    label: plugin.name,
+    type: 'community',
+    children: pinyinSort(plugin.supported_games, g => g.name).map(game => ({
+      id: `game-${plugin.id}-${game.id}`,
+      label: game.name,
+      type: 'game',
+      icon: game.icon,
+      gameId: game.id,
+      pluginId: plugin.id,
+      pluginName: plugin.name,
+    })),
+  }))
+})
 
-async function changePassword() {
-  if (pwdForm.new1 !== pwdForm.new2) { ElMessage.warning('两次输入的新密码不一致'); return }
-  try {
-    await api.put('/api/unlock/password', { old_password: pwdForm.old, new_password: pwdForm.new1 })
-    ElMessage.success('密码已修改')
-    pwdDialog.value = false
-    pwdForm.old = ''; pwdForm.new1 = ''; pwdForm.new2 = ''
-  } catch (e: any) {
-    ElMessage.error(e.response?.data?.detail || '修改失败')
+function hasItem(letter: string): boolean {
+  return treeData.value.some(c =>
+    (c.children || []).some(g => getInitial(g.label) === letter)
+  )
+}
+
+function isHighlighted(data: any): boolean {
+  if (!highlightLetter.value || data.type !== 'game') return false
+  return getInitial(data.label) === highlightLetter.value
+}
+
+function handleAZClick(letter: string) {
+  highlightLetter.value = highlightLetter.value === letter ? '' : letter
+}
+
+function handleNodeClick(data: any) {
+  if (data.type === 'community') {
+    highlightLetter.value = ''
+  } else {
+    store.setSelectedGame({
+      gameId: data.gameId,
+      gameName: data.label,
+      gameIcon: data.icon,
+      pluginId: data.pluginId,
+      pluginName: data.pluginName,
+    })
   }
 }
 
@@ -31,57 +65,224 @@ async function handleLock() {
   await store.lock()
   router.replace('/')
 }
+
+function showChangePwd() {
+  store.showChangePassword = true
+}
+
+function refreshLogs() {
+  logRef.value?.refreshLogs()
+}
+
+const headerGradient = computed(() => {
+  if (store.showChangePassword || !store.selectedGame) return 'linear-gradient(90deg, #f5f7fa, #e4e7ed)'
+  return gameGradient(store.selectedGame.gameId)
+})
+
+const headerLabel = computed(() => {
+  if (store.showChangePassword) return '修改密码'
+  if (store.selectedGame) return store.selectedGame.gameName
+  return '游戏签到中心'
+})
+
+onMounted(async () => {
+  try { store.plugins = await fetchPlugins() } catch {}
+})
 </script>
 
 <template>
-  <el-container style="flex-direction:column;height:100%">
-    <el-header style="height:48px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e4e7ed;padding:0 16px;flex-shrink:0">
-      <span style="font-size:16px;font-weight:600;color:#303133">游戏签到中心</span>
-      <div style="display:flex;align-items:center;gap:8px">
-        <el-button size="small" @click="handleLock">锁定</el-button>
+<el-container style="height:100vh">
+  <el-aside width="300px" style="background:#fff;border-right:1px solid #e4e7ed;display:flex;flex-direction:column">
+    <div style="height:48px;display:flex;align-items:center;justify-content:center">
+      <div class="rainbow-title">GameSignHub</div>
+    </div>
+    <el-divider style="margin:0" />
+
+    <div style="flex:1;overflow:hidden;position:relative;display:flex;min-height:0">
+      <div style="flex:1;overflow-y:auto;padding:4px 8px 4px 8px">
+        <el-tree
+          :data="treeData"
+          node-key="id"
+          :highlight-current="false"
+          :expand-on-click-node="true"
+          default-expand-all
+          @node-click="handleNodeClick"
+        >
+          <template #default="{ data }">
+            <div v-if="data.type === 'community'" class="tree-community">
+              <span>{{ data.label }}</span>
+            </div>
+            <div
+              v-else
+              class="tree-game"
+              :class="{
+                active: store.selectedGame?.gameId === data.gameId && store.selectedGame?.pluginId === data.pluginId,
+                highlighted: isHighlighted(data),
+              }"
+            >
+              <img :src="data.icon" class="tree-game-icon" />
+              <span>{{ data.label }}</span>
+            </div>
+          </template>
+        </el-tree>
       </div>
+
+      <div style="width:28px;display:flex;flex-direction:column;align-items:flex-start;flex-shrink:0;user-select:none;gap:1px;padding:4px 2px;border-left:1px dashed var(--el-border-color-lighter);justify-content:center">
+        <div
+          class="az-letter all"
+          :class="{ active: !highlightLetter }"
+          @click="highlightLetter = ''"
+        >All</div>
+        <div
+          v-for="letter in ALPHABET" :key="letter"
+          class="az-letter"
+          :class="{ disabled: !hasItem(letter), active: highlightLetter === letter }"
+          @click="handleAZClick(letter)"
+        >{{ letter }}</div>
+      </div>
+    </div>
+
+    <el-divider style="margin:0" />
+    <div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;align-items:center">
+      <el-button type="warning" plain @click="showChangePwd">
+        修改密码
+      </el-button>
+      <el-button type="danger" plain @click="handleLock">
+        锁定屏幕
+      </el-button>
+    </div>
+  </el-aside>
+
+  <el-container>
+    <el-header
+      style="height:48px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid #e4e7ed;flex-shrink:0"
+      :style="{ background: headerGradient }"
+    >
+      <div v-if="store.selectedGame && !store.showChangePassword" style="display:flex;align-items:center;gap:8px">
+        <img :src="store.selectedGame.gameIcon" style="width:24px;height:24px;border-radius:6px;object-fit:cover" />
+        <span style="font-size:16px;font-weight:600" :style="{ color: gameColor(store.selectedGame.gameId) }">
+          {{ headerLabel }}
+        </span>
+      </div>
+      <span v-else style="font-size:16px;font-weight:600;color:#303133">{{ headerLabel }}</span>
     </el-header>
 
-    <el-main style="flex:1;overflow-y:auto;padding:12px 16px">
-      <DashboardView v-if="activeTab === 'dashboard'" />
-      <CredentialsView v-if="activeTab === 'accounts'" />
-
-      <div v-if="activeTab === 'password'" style="max-width:360px;margin:0 auto">
-        <h3 style="margin-bottom:16px">修改密码</h3>
-        <el-form label-width="80px">
-          <el-form-item label="旧密码">
-            <el-input v-model="pwdForm.old" type="password" show-password />
-          </el-form-item>
-          <el-form-item label="新密码">
-            <el-input v-model="pwdForm.new1" type="password" show-password />
-          </el-form-item>
-          <el-form-item label="确认密码">
-            <el-input v-model="pwdForm.new2" type="password" show-password />
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" @click="changePassword">确认修改</el-button>
-          </el-form-item>
-        </el-form>
-      </div>
-    </el-main>
-
-    <el-footer style="height:auto;padding:0;border-top:1px solid #e4e7ed;flex-shrink:0">
-      <div style="display:flex;padding-bottom:env(safe-area-inset-bottom,0px)">
-        <div
-          v-for="tab in [
-            { key: 'accounts', label: '账户管理', icon: User },
-            { key: 'dashboard', label: '控制面板', icon: Monitor },
-            { key: 'password', label: '修改密码', icon: Lock },
-          ]"
-          :key="tab.key"
-          @click="activeTab = tab.key"
-          style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 0;cursor:pointer"
-          :style="{ color: activeTab === tab.key ? '#409eff' : '#909399' }"
-        >
-          <el-icon :size="20"><component :is="tab.icon" /></el-icon>
-          <span style="font-size:12px;margin-top:2px">{{ tab.label }}</span>
+    <el-main style="padding:12px 16px;display:flex;flex-direction:column;overflow:hidden">
+      <WelcomePage v-if="!store.selectedGame && !store.showChangePassword" />
+      <ChangePasswordForm v-else-if="store.showChangePassword" />
+      <template v-else>
+        <div style="height:50%;padding-bottom:8px;display:flex;flex-direction:column;min-height:0">
+          <AccountTable :plugin-id="store.selectedGame?.pluginId || ''" @refresh-logs="refreshLogs" />
         </div>
-      </div>
-    </el-footer>
+        <div style="height:1px;background:#e4e7ed;flex-shrink:0;margin:0" />
+        <div style="height:50%;padding-top:8px;display:flex;flex-direction:column;min-height:0">
+          <LogTerminal ref="logRef" />
+        </div>
+      </template>
+    </el-main>
   </el-container>
+</el-container>
 </template>
+
+<style>
+.rainbow-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: linear-gradient(90deg,
+    #FF0000, #FF7F00, #FFFF00, #00FF00,
+    #00E5FF, #0000FF, #8B00FF, #FF0000);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: rainbow-shift 4s linear infinite;
+}
+
+@keyframes rainbow-shift {
+  to { background-position: 200% center; }
+}
+
+.el-tree-node:not(:last-child) {
+  margin-bottom: 12px;
+}
+
+.el-tree-node__children {
+  padding-top: 8px;
+}
+</style>
+
+<style scoped>
+.tree-community {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+  padding: 2px 0;
+}
+
+.tree-game {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 16px;
+  color: #606266;
+  cursor: pointer;
+  transition: all 0.15s;
+  word-break: break-word;
+}
+.tree-game:hover {
+  background: #f0f5ff;
+  color: #409eff;
+}
+.tree-game.active {
+  background: #ecf5ff;
+  color: #409eff;
+  font-weight: 600;
+}
+.tree-game.highlighted {
+  background: linear-gradient(135deg, #fff8e1, #fff3cd);
+  border: 2px solid #f0ad4e;
+  border-radius: 8px;
+}
+
+.tree-game-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.az-letter.all {
+  font-weight: 700;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #dcdfe6;
+}
+
+.az-letter {
+  font-size: 12px;
+  line-height: 1.2;
+  color: #909399;
+  cursor: pointer;
+  padding: 1px 2px;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+.az-letter:hover:not(.disabled) {
+  color: #409eff;
+  background: #ecf5ff;
+}
+.az-letter.disabled {
+  color: #dcdfe6;
+  cursor: default;
+}
+.az-letter.active {
+  color: #fff;
+  background: #409eff;
+  font-weight: 700;
+}
+
+</style>

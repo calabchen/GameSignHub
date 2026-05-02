@@ -2,8 +2,6 @@
 import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import { ElMessage } from 'element-plus'
-import { api } from '@/api'
 
 const route = useRoute()
 const router = useRouter()

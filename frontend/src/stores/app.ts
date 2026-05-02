@@ -2,6 +2,30 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api'
 
+export interface GameInfo {
+  id: string
+  name: string
+  has_forum: boolean
+  icon: string
+}
+
+export interface PluginInfo {
+  id: string
+  name: string
+  version: string
+  description: string
+  homepage: string | null
+  supported_games: GameInfo[]
+}
+
+export interface SelectedGame {
+  gameId: string
+  gameName: string
+  gameIcon: string
+  pluginId: string
+  pluginName: string
+}
+
 export const useAppStore = defineStore('app', () => {
   const isUnlocked = ref(false)
   const isPasswordSet = ref(false)
@@ -17,6 +41,10 @@ export const useAppStore = defineStore('app', () => {
   })
 
   const isReady = ref(false)
+
+  const plugins = ref<PluginInfo[]>([])
+  const selectedGame = ref<SelectedGame | null>(null)
+  const showChangePassword = ref(false)
 
   async function checkStatus() {
     try {
@@ -49,5 +77,14 @@ export const useAppStore = defineStore('app', () => {
     isUnlocked.value = false
   }
 
-  return { isReady, isUnlocked, isPasswordSet, pluginsLoaded, token, loading, axiosHeaders, checkStatus, unlock, lock }
+  function setSelectedGame(game: SelectedGame | null) {
+    selectedGame.value = game
+    showChangePassword.value = false
+  }
+
+  return {
+    isReady, isUnlocked, isPasswordSet, pluginsLoaded, token, loading, axiosHeaders,
+    checkStatus, unlock, lock,
+    plugins, selectedGame, showChangePassword, setSelectedGame,
+  }
 })
