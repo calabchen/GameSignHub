@@ -78,7 +78,7 @@ class SignScheduler:
             trigger = CronTrigger.from_crontab(DEFAULT_CRON)
 
         self._aps.add_job(
-            lambda pid=plugin_id, cid=account_id, gid=game_id: self._wrapped_sign(pid, cid, gid),
+            self._wrapped_sign, args=[plugin_id, account_id, game_id],
             trigger=trigger,
             id=job_id,
             name=f"账户#{account_id}-{game_id}定时签到",

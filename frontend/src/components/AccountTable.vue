@@ -44,18 +44,22 @@ const scheduleDialog = ref(false)
 const scheduleCredId = ref<number | null>(null)
 const schedulePlugin = ref('')
 const scheduleGames = reactive({
-  wuwa: { cron: '', enabled: false },
-  pgr: { cron: '', enabled: false },
+  wuwa: { hour: 7, minute: 0, cron: '', enabled: false },
+  pgr: { hour: 7, minute: 0, cron: '', enabled: false },
 })
 const signingGame = ref<string | null>(null)
 
-const schedulePresets = [
-  { label: '每天 07:00', value: '0 7 * * *' },
-  { label: '每天 08:00', value: '0 8 * * *' },
-  { label: '每天 12:00', value: '0 12 * * *' },
-  { label: '每天 18:00', value: '0 18 * * *' },
-  { label: '每天 22:00', value: '0 22 * * *' },
-]
+function parseCron(cron: string): { hour: number; minute: number } {
+  const parts = (cron || '').split(' ')
+  return parts.length >= 2
+    ? { minute: parseInt(parts[0]) || 0, hour: parseInt(parts[1]) || 7 }
+    : { hour: 7, minute: 0 }
+}
+
+function applyCron(game: { hour: number; minute: number; cron: string }, cron: string) {
+  const { hour, minute } = parseCron(cron)
+  game.hour = hour; game.minute = minute; game.cron = cron
+}
 
 onMounted(async () => {
   try { plugins.value = await fetchPlugins() } catch {}
@@ -148,14 +152,17 @@ async function handleDelete(account: any) {
 async function openSignSchedule(account: any) {
   scheduleCredId.value = account.id
   schedulePlugin.value = account.plugin_id
-  scheduleGames.wuwa = { cron: '', enabled: false }; scheduleGames.pgr = { cron: '', enabled: false }
+  scheduleGames.wuwa = { hour: 7, minute: 0, cron: '', enabled: false }
+  scheduleGames.pgr = { hour: 7, minute: 0, cron: '', enabled: false }
   try {
     const [w, p] = await Promise.all([
-      fetchAccountSchedule(account.id, 'wuwa'),
-      fetchAccountSchedule(account.id, 'pgr'),
+      fetchAccountSchedule(account.id, 'wuwa', account.plugin_id),
+      fetchAccountSchedule(account.id, 'pgr', account.plugin_id),
     ])
-    scheduleGames.wuwa = { cron: w.cron || '', enabled: w.enabled || false }
-    scheduleGames.pgr = { cron: p.cron || '', enabled: p.enabled || false }
+    applyCron(scheduleGames.wuwa, w.cron || '')
+    scheduleGames.wuwa.enabled = w.enabled || false
+    applyCron(scheduleGames.pgr, p.cron || '')
+    scheduleGames.pgr.enabled = p.enabled || false
   } catch {}
   scheduleDialog.value = true
 }
@@ -174,10 +181,12 @@ async function handleSignGame(game: string) {
 
 async function saveSchedule() {
   if (scheduleCredId.value == null) return
+  const wuwaCron = `${scheduleGames.wuwa.minute} ${scheduleGames.wuwa.hour} * * *`
+  const pgrCron = `${scheduleGames.pgr.minute} ${scheduleGames.pgr.hour} * * *`
   try {
     await Promise.all([
-      updateAccountSchedule(scheduleCredId.value, 'wuwa', scheduleGames.wuwa.cron, scheduleGames.wuwa.enabled),
-      updateAccountSchedule(scheduleCredId.value, 'pgr', scheduleGames.pgr.cron, scheduleGames.pgr.enabled),
+      updateAccountSchedule(scheduleCredId.value, 'wuwa', wuwaCron, scheduleGames.wuwa.enabled, schedulePlugin.value),
+      updateAccountSchedule(scheduleCredId.value, 'pgr', pgrCron, scheduleGames.pgr.enabled, schedulePlugin.value),
     ])
     ElMessage.success('定时设置已更新'); scheduleDialog.value = false
     try { allAccounts.value = await fetchAccounts(); accountPage.value = 1 } catch {}
@@ -266,26 +275,30 @@ async function saveSchedule() {
   <el-dialog v-model="scheduleDialog" title="签到 & 定时" width="90%" style="max-width:420px">
     <div style="margin-bottom:16px">
       <div style="font-weight:600;margin-bottom:8px;color:#303133">鸣潮</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-        <el-button size="small" type="primary" :loading="signingGame === 'wuwa'" @click="handleSignGame('wuwa')">立即签到鸣潮</el-button>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <el-button size="small" type="primary" :loading="signingGame === 'wuwa'" @click="handleSignGame('wuwa')">立即签到</el-button>
         <el-switch v-model="scheduleGames.wuwa.enabled" />
-        <el-select v-model="scheduleGames.wuwa.cron" size="small" style="flex:1;min-width:0" :disabled="!scheduleGames.wuwa.enabled">
-          <el-option v-for="p in schedulePresets" :key="p.value" :label="p.label" :value="p.value" />
+        <el-select v-model="scheduleGames.wuwa.hour" size="small" style="width:80px" :disabled="!scheduleGames.wuwa.enabled">
+          <el-option v-for="h in 24" :key="h-1" :label="`${String(h-1).padStart(2,'0')} 时`" :value="h-1" />
+        </el-select>
+        <el-select v-model="scheduleGames.wuwa.minute" size="small" style="width:80px" :disabled="!scheduleGames.wuwa.enabled">
+          <el-option v-for="m in 60" :key="m-1" :label="`${String(m-1).padStart(2,'0')} 分`" :value="m-1" />
         </el-select>
       </div>
-      <el-input v-if="!schedulePresets.find(p => p.value === scheduleGames.wuwa.cron)" v-model="scheduleGames.wuwa.cron" placeholder="0 7 * * *" size="small" :disabled="!scheduleGames.wuwa.enabled" />
     </div>
     <el-divider />
     <div style="margin-bottom:16px">
       <div style="font-weight:600;margin-bottom:8px;color:#303133">战双</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-        <el-button size="small" type="primary" :loading="signingGame === 'pgr'" @click="handleSignGame('pgr')">立即签到战双</el-button>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <el-button size="small" type="primary" :loading="signingGame === 'pgr'" @click="handleSignGame('pgr')">立即签到</el-button>
         <el-switch v-model="scheduleGames.pgr.enabled" />
-        <el-select v-model="scheduleGames.pgr.cron" size="small" style="flex:1;min-width:0" :disabled="!scheduleGames.pgr.enabled">
-          <el-option v-for="p in schedulePresets" :key="p.value" :label="p.label" :value="p.value" />
+        <el-select v-model="scheduleGames.pgr.hour" size="small" style="width:80px" :disabled="!scheduleGames.pgr.enabled">
+          <el-option v-for="h in 24" :key="h-1" :label="`${String(h-1).padStart(2,'0')} 时`" :value="h-1" />
+        </el-select>
+        <el-select v-model="scheduleGames.pgr.minute" size="small" style="width:80px" :disabled="!scheduleGames.pgr.enabled">
+          <el-option v-for="m in 60" :key="m-1" :label="`${String(m-1).padStart(2,'0')} 分`" :value="m-1" />
         </el-select>
       </div>
-      <el-input v-if="!schedulePresets.find(p => p.value === scheduleGames.pgr.cron)" v-model="scheduleGames.pgr.cron" placeholder="0 7 * * *" size="small" :disabled="!scheduleGames.pgr.enabled" />
     </div>
     <template #footer>
       <el-button @click="scheduleDialog = false">关闭</el-button>

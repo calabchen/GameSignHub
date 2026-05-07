@@ -129,13 +129,13 @@ def create_app() -> FastAPI:
     app.include_router(logs_router.router)
     app.include_router(schedule_router.router)
 
-    dist_path = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-    if dist_path.exists():
-        app.mount("/", StaticFiles(directory=str(dist_path), html=True), name="static")
-
     @app.get("/version", include_in_schema=False)
     async def version():
         return {"name": "GameSignHub", "version": "0.4.0", "status": "running"}
+
+    dist_path = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    if dist_path.exists():
+        app.mount("/", StaticFiles(directory=str(dist_path), html=True), name="static")
 
     return app
 

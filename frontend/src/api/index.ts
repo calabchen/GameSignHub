@@ -44,8 +44,8 @@ export async function deleteAccount(id: number) {
   return res.data
 }
 
-export async function validateAccount(id: number) {
-  const res = await api.post(`/api/accounts/${id}/validate`)
+export async function validateAccount(id: number, plugin: string = 'kuro') {
+  const res = await api.post(`/api/accounts/${id}/validate?plugin=${plugin}`)
   return res.data
 }
 
@@ -86,13 +86,13 @@ export async function clearLogs() {
   return res.data
 }
 
-export async function fetchAccountSchedule(id: number, gameId: string) {
-  const res = await api.get(`/api/accounts/${id}/schedule/${gameId}`)
+export async function fetchAccountSchedule(id: number, gameId: string, plugin: string) {
+  const res = await api.get(`/api/accounts/${id}/schedule/${gameId}`, { params: { plugin } })
   return res.data
 }
 
-export async function updateAccountSchedule(id: number, gameId: string, cron: string, enabled: boolean) {
-  const res = await api.put(`/api/accounts/${id}/schedule/${gameId}`, { cron, enabled })
+export async function updateAccountSchedule(id: number, gameId: string, cron: string, enabled: boolean, plugin: string) {
+  const res = await api.put(`/api/accounts/${id}/schedule/${gameId}`, { cron, enabled }, { params: { plugin } })
   return res.data
 }
 
@@ -102,6 +102,6 @@ export async function fetchAccountDetail(id: number, plugin: string) {
 }
 
 // backward-compatible aliases
-export const fetchCredentialSchedule = fetchAccountSchedule
-export const updateCredentialSchedule = updateAccountSchedule
+export const fetchCredentialSchedule = (id: number, gameId: string) => fetchAccountSchedule(id, gameId, 'kuro')
+export const updateCredentialSchedule = (id: number, gameId: string, cron: string, enabled: boolean) => updateAccountSchedule(id, gameId, cron, enabled, 'kuro')
 export const fetchCredentialDetail = (id: number) => fetchAccountDetail(id, 'kuro')
