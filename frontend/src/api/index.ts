@@ -24,30 +24,37 @@ export async function fetchPlugin(id: string) {
   return res.data
 }
 
-export async function fetchCredentials() {
-  const res = await api.get('/api/credentials')
+export async function fetchAccounts() {
+  const res = await api.get('/api/accounts')
   return res.data
 }
 
-export async function createCredential(data: any) {
-  const res = await api.post('/api/credentials', data)
+export async function createAccount(data: any) {
+  const res = await api.post('/api/accounts', data)
   return res.data
 }
 
-export async function updateCredential(id: number, data: any) {
-  const res = await api.put(`/api/credentials/${id}`, data)
+export async function updateAccount(id: number, data: any) {
+  const res = await api.patch(`/api/accounts/${id}`, data)
   return res.data
 }
 
-export async function deleteCredential(id: number) {
-  const res = await api.delete(`/api/credentials/${id}`)
+export async function deleteAccount(id: number) {
+  const res = await api.delete(`/api/accounts/${id}`)
   return res.data
 }
 
-export async function validateCredential(id: number) {
-  const res = await api.post(`/api/credentials/${id}/validate`)
+export async function validateAccount(id: number) {
+  const res = await api.post(`/api/accounts/${id}/validate`)
   return res.data
 }
+
+// backward-compatible aliases
+export const fetchCredentials = fetchAccounts
+export const createCredential = createAccount
+export const updateCredential = updateAccount
+export const deleteCredential = deleteAccount
+export const validateCredential = validateAccount
 
 export async function signCredential(pluginId: string, credId: number, gameId: string) {
   const res = await api.post(`/api/signs/plugins/${pluginId}/credentials/${credId}/games/${gameId}`)
@@ -79,17 +86,22 @@ export async function clearLogs() {
   return res.data
 }
 
-export async function fetchCredentialSchedule(id: number, gameId: string) {
-  const res = await api.get(`/api/credentials/${id}/schedule/${gameId}`)
+export async function fetchAccountSchedule(id: number, gameId: string) {
+  const res = await api.get(`/api/accounts/${id}/schedule/${gameId}`)
   return res.data
 }
 
-export async function updateCredentialSchedule(id: number, gameId: string, cron: string, enabled: boolean) {
-  const res = await api.put(`/api/credentials/${id}/schedule/${gameId}`, { cron, enabled })
+export async function updateAccountSchedule(id: number, gameId: string, cron: string, enabled: boolean) {
+  const res = await api.put(`/api/accounts/${id}/schedule/${gameId}`, { cron, enabled })
   return res.data
 }
 
-export async function fetchCredentialDetail(id: number) {
-  const res = await api.get(`/api/credentials/${id}/detail`)
+export async function fetchAccountDetail(id: number, plugin: string) {
+  const res = await api.get(`/api/accounts/${id}/detail`, { params: { plugin } })
   return res.data
 }
+
+// backward-compatible aliases
+export const fetchCredentialSchedule = fetchAccountSchedule
+export const updateCredentialSchedule = updateAccountSchedule
+export const fetchCredentialDetail = (id: number) => fetchAccountDetail(id, 'kuro')

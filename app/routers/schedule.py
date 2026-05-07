@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.core.auth import verify_access_token
+from app.core.security import verify_access_token
 from app.core.scheduler import SignScheduler
 
 router = APIRouter(prefix="/api/schedules", tags=["schedule"])

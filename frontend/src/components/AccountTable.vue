@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import {
-  fetchPlugins, fetchCredentials, createCredential, updateCredential, deleteCredential,
+  fetchPlugins, fetchAccounts, createAccount, updateAccount, deleteAccount,
   signCredential,
-  fetchCredentialSchedule, updateCredentialSchedule, fetchCredentialDetail,
+  fetchAccountSchedule, updateAccountSchedule, fetchAccountDetail,
 } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Timer, CopyDocument } from '@element-plus/icons-vue'
@@ -59,7 +59,7 @@ const schedulePresets = [
 
 onMounted(async () => {
   try { plugins.value = await fetchPlugins() } catch {}
-  try { allAccounts.value = await fetchCredentials() } catch {}
+  try { allAccounts.value = await fetchAccounts() } catch {}
   accountPage.value = 1
 })
 
@@ -116,7 +116,7 @@ async function openEdit(account: any) {
   dialogTitle.value = '编辑账户'; form.id = account.id
   form.plugin_id = account.plugin_id; form.is_enabled = account.is_enabled
   if (account.plugin_id === 'kuro') {
-    try { const detail = await fetchCredentialDetail(account.id); kuroFieldsFromDetail(detail) } catch { resetKuroFields() }
+    try { const detail = await fetchAccountDetail(account.id, account.plugin_id); kuroFieldsFromDetail(detail) } catch { resetKuroFields() }
   }
   dialogVisible.value = true
 }
@@ -129,19 +129,19 @@ async function handleSave() {
     wuwa_role_id: k.wuwa_role_id, pgr_role_id: k.pgr_role_id,
   }
   try {
-    if (form.id) { await updateCredential(form.id, payload); ElMessage.success('已更新') }
-    else { await createCredential(payload); ElMessage.success('已创建') }
+    if (form.id) { await updateAccount(form.id, payload); ElMessage.success('已更新') }
+    else { await createAccount(payload); ElMessage.success('已创建') }
     dialogVisible.value = false
-    try { allAccounts.value = await fetchCredentials(); accountPage.value = 1 } catch {}
+    try { allAccounts.value = await fetchAccounts(); accountPage.value = 1 } catch {}
   } catch (e: any) { ElMessage.error(e.response?.data?.detail || '操作失败') }
 }
 
 async function handleDelete(account: any) {
   try {
     await ElMessageBox.confirm('确定删除此账户？', '确认', { type: 'warning' })
-    await deleteCredential(account.id)
+    await deleteAccount(account.id)
     ElMessage.success('已删除')
-    try { allAccounts.value = await fetchCredentials(); accountPage.value = 1 } catch {}
+    try { allAccounts.value = await fetchAccounts(); accountPage.value = 1 } catch {}
   } catch {}
 }
 
@@ -151,8 +151,8 @@ async function openSignSchedule(account: any) {
   scheduleGames.wuwa = { cron: '', enabled: false }; scheduleGames.pgr = { cron: '', enabled: false }
   try {
     const [w, p] = await Promise.all([
-      fetchCredentialSchedule(account.id, 'wuwa'),
-      fetchCredentialSchedule(account.id, 'pgr'),
+      fetchAccountSchedule(account.id, 'wuwa'),
+      fetchAccountSchedule(account.id, 'pgr'),
     ])
     scheduleGames.wuwa = { cron: w.cron || '', enabled: w.enabled || false }
     scheduleGames.pgr = { cron: p.cron || '', enabled: p.enabled || false }
@@ -176,11 +176,11 @@ async function saveSchedule() {
   if (scheduleCredId.value == null) return
   try {
     await Promise.all([
-      updateCredentialSchedule(scheduleCredId.value, 'wuwa', scheduleGames.wuwa.cron, scheduleGames.wuwa.enabled),
-      updateCredentialSchedule(scheduleCredId.value, 'pgr', scheduleGames.pgr.cron, scheduleGames.pgr.enabled),
+      updateAccountSchedule(scheduleCredId.value, 'wuwa', scheduleGames.wuwa.cron, scheduleGames.wuwa.enabled),
+      updateAccountSchedule(scheduleCredId.value, 'pgr', scheduleGames.pgr.cron, scheduleGames.pgr.enabled),
     ])
     ElMessage.success('定时设置已更新'); scheduleDialog.value = false
-    try { allAccounts.value = await fetchCredentials(); accountPage.value = 1 } catch {}
+    try { allAccounts.value = await fetchAccounts(); accountPage.value = 1 } catch {}
   } catch (e: any) { ElMessage.error(e.response?.data?.detail || '更新失败') }
 }
 </script>

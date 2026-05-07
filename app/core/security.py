@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import bcrypt
 
-from app.config import get_settings
+from app.core.config import get_settings
 
 JWT_EXPIRE_HOURS = 24
 

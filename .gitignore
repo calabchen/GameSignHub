@@ -10,8 +10,8 @@ build/
 .venv/
 venv/
 
-# uv
-uv.lock
+# Runtime data
+app/config/
 
 # Environment
 .env

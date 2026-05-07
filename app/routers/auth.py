@@ -6,12 +6,13 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.core.auth import create_access_token, hash_password, verify_password
-from app.schemas.auth import LockResponse, StatusResponse, UnlockRequest, UnlockResponse
+from app.core.config import get_project_root
+from app.core.security import create_access_token, hash_password, verify_password
+from app.schemas import LockResponse, StatusResponse, UnlockRequest, UnlockResponse
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
-SETTINGS_PATH = Path("config") / "settings.yaml"
+SETTINGS_PATH = get_project_root() / "app" / "config" / "settings.yaml"
 
 
 class ChangePasswordRequest(BaseModel):

@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-from app.config import get_settings
+from app.core.config import get_settings
 from app.core.plugin_base import BaseGamePlugin
 
 
@@ -12,7 +12,7 @@ class PluginLoader:
 
     两种加载来源:
     1. plugins/ 目录 — 官方内置插件
-    2. user_plugins/ 目录 — 用户手动安装的第三方插件
+    2. user_plugins/ 目录 — 用户手动安装的第三方插件（准备取消）
     """
 
     def __init__(self) -> None:
@@ -72,6 +72,7 @@ class PluginLoader:
             except Exception as e:
                 # 插件加载失败不应阻止其他插件
                 import logging
+
                 logging.getLogger("app").warning(
                     "Failed to load plugin %s: %s", pkg_path.name, e
                 )
@@ -85,11 +86,7 @@ class PluginLoader:
 
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
-            if (
-                isinstance(attr, type)
-                and issubclass(attr, BGP)
-                and attr is not BGP
-            ):
+            if isinstance(attr, type) and issubclass(attr, BGP) and attr is not BGP:
                 return attr()
         return None
 

@@ -1,11 +1,11 @@
-﻿"""签到日志查询 API。"""
+﻿"""签到日志查询 API（只读）。"""
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.core.auth import verify_access_token
-from app.core.orchestrator import Orchestrator
-from app.schemas.log import SignLogEntry, SignLogPage, TodaySummary
+from app.core.security import verify_access_token
+from app.core.crud_log import clear_logs, get_logs, get_today_summary
+from app.schemas import SignLogEntry, SignLogPage
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 security = HTTPBearer()
@@ -27,9 +27,10 @@ async def list_logs(
     try:
         verify_access_token(credentials.credentials)
     except Exception:
-        pass  # logs are readable without auth in this implementation
-    oc: Orchestrator = request.app.state.orchestrator
-    rows, total = await oc.get_logs(
+        pass
+
+    rows, total = await get_logs(
+        request.app.state.session_factory,
         page=page,
         page_size=page_size,
         plugin_id=plugin_id,
@@ -41,40 +42,43 @@ async def list_logs(
     )
     items = [
         SignLogEntry(
-            id=row.id,
-            credential_id=row.credential_id,
-            credential_name=row.credential_name,
-            plugin_id=row.plugin_id,
-            game_id=row.game_id,
-            status=row.status,
-            reward=row.reward,
-            message=row.message,
-            elapsed=row.elapsed,
-            signed_at=row.signed_at.isoformat(),
-            created_at=row.created_at.isoformat(),
+            id=row["id"],
+            credential_id=row["credential_id"],
+            credential_name=row["credential_name"],
+            plugin_id=row["plugin_id"],
+            game_id=row["game_id"],
+            status=row["status"],
+            reward=row["reward"],
+            message=row["message"],
+            elapsed=row["elapsed"],
+            signed_at=row["signed_at"],
+            created_at=row["created_at"],
         )
         for row in rows
     ]
     return SignLogPage(items=items, total=total, page=page, page_size=page_size)
 
 
-@router.get("/today", response_model=TodaySummary)
-async def today_summary(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+@router.get("/today")
+async def today_summary(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
     try:
         verify_access_token(credentials.credentials)
     except Exception:
         pass
-    oc: Orchestrator = request.app.state.orchestrator
-    data = await oc.get_today_summary()
-    return TodaySummary(**data)
+    return await get_today_summary(request.app.state.session_factory)
 
 
 @router.delete("")
-async def clear_logs(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def delete_logs(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
     try:
         verify_access_token(credentials.credentials)
     except Exception:
-        pass
-    oc: Orchestrator = request.app.state.orchestrator
-    count = await oc.clear_logs()
-    return {"message": f"已清除 {count} 条日志"}
+        raise HTTPException(status_code=401, detail="未授权")
+    await clear_logs(request.app.state.session_factory)
+    return {"message": "日志已清空"}

@@ -1,5 +1,5 @@
 """Routers package."""
 
-from app.routers import auth, credentials, logs, plugins, schedule, sign
+from app.routers import auth, logs, plugins, schedule, sign
 
-__all__ = ["auth", "credentials", "logs", "plugins", "schedule", "sign"]
+__all__ = ["auth", "logs", "plugins", "schedule", "sign"]

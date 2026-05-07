@@ -1,17 +1,18 @@
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from fastapi import FastAPI
 import httpx
 
-from app.database import Base
-from app.config import Settings, get_settings
-from app.core.yaml_store import YamlStore
+from app.core.config import Settings, get_settings
+from app.core import crud_yaml
+from app.core.crud_log import CREATE_TABLE_SQL
 from app.core.orchestrator import Orchestrator
 from app.core.plugin_base import BaseGamePlugin, PluginInfo, GameInfo, SignInResult
 
-import app.database as _db
-import app.config as _cfg
+import app.core.db as _db
+import app.core.config as _cfg
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -19,10 +20,12 @@ async def _reset_module_state():
     _db._engine = None
     _db._session_factory = None
     _cfg.get_settings.cache_clear()
+    crud_yaml.reset_store()
     yield
     _db._engine = None
     _db._session_factory = None
     _cfg.get_settings.cache_clear()
+    crud_yaml.reset_store()
 
 
 @pytest_asyncio.fixture
@@ -35,20 +38,24 @@ async def test_session_factory(tmp_path, monkeypatch):
 
     engine = create_async_engine(db_url, echo=False)
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text(CREATE_TABLE_SQL))
 
     factory = async_sessionmaker(engine, expire_on_commit=False)
     (tmp_path / "config").mkdir(parents=True, exist_ok=True)
+    crud_yaml.init_store(str(tmp_path / "config"))
     yield factory
 
     await engine.dispose()
 
 
 @pytest_asyncio.fixture
-async def yaml_store(tmp_path):
-    config_dir = tmp_path / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    return YamlStore(str(config_dir))
+async def yaml_store():
+    return crud_yaml
+
+
+@pytest_asyncio.fixture(autouse=True)
+def _reset_yaml_store():
+    crud_yaml.reset_store()
 
 
 class _MockPlugin(BaseGamePlugin):
@@ -87,22 +94,22 @@ def mock_plugin_registry():
 
 
 @pytest_asyncio.fixture
-async def test_app(test_session_factory, yaml_store, mock_plugin_registry, tmp_path):
-    from app.core.auth import create_access_token
-    orchestrator = Orchestrator(mock_plugin_registry, yaml_store, test_session_factory)
+async def test_app(test_session_factory, mock_plugin_registry, tmp_path):
+    from app.core.security import create_access_token
+
+    orchestrator = Orchestrator(mock_plugin_registry, test_session_factory)
 
     token = create_access_token()
 
     app = FastAPI()
-    app.state.yaml_store = yaml_store
     app.state.plugin_registry = mock_plugin_registry
     app.state.orchestrator = orchestrator
     app.state.scheduler = type("obj", (), {"remove_credential": lambda s, x: None, "register": lambda s, *a: None})()
     app.state.is_unlocked = True
 
-    from app.routers import credentials as cred_router
+    from app.routers import accounts as accounts_router
     from app.routers import sign as sign_router
-    app.include_router(cred_router.router)
+    app.include_router(accounts_router.router)
     app.include_router(sign_router.router)
 
     transport = httpx.ASGITransport(app=app)
